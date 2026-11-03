@@ -11,17 +11,30 @@ android {
         applicationId "com.berrybot"
         minSdkVersion 18
         targetSdkVersion 33
-        versionCode 14
-        versionName "1.0.14"
+        versionCode 15
+        versionName "1.0.15"
+    }
+
+    signingConfigs {
+        appSign {
+            storeFile file('berrybot.keystore')
+            storePassword 'berrybot'
+            keyAlias 'berrybot'
+            keyPassword 'berrybot'
+            v1SigningEnabled true
+            v2SigningEnabled true
+        }
     }
 
     buildTypes {
         release {
+            signingConfig signingConfigs.appSign
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         debug {
+            signingConfig signingConfigs.appSign
             debuggable true
             minifyEnabled true
             shrinkResources true
