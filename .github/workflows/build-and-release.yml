@@ -2,9 +2,13 @@ name: Build and Release BerryBot
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main" ]
     tags: [ "v*" ]
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
@@ -25,10 +29,14 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-33 build-tools;33.0.2'
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
@@ -45,9 +53,9 @@ jobs:
           mkdir -p release_dist
           cp app/build/outputs/apk/debug/app-debug.apk release_dist/berrybot-debug.apk
           
-          # Extract version from app/build.gradle
-          VERSION_CODE=$(grep 'versionCode' app/build.gradle | head -n1 | awk '{print $2}')
-          VERSION_NAME=$(grep 'versionName' app/build.gradle | head -n1 | tr -d '"' | awk '{print $2}')
+          # Extract version from app/build.gradle safely
+          VERSION_CODE=$(grep -E '^\s*versionCode' app/build.gradle | head -n1 | awk '{print $2}' | tr -d '\r\n[:space:]')
+          VERSION_NAME=$(grep -E '^\s*versionName' app/build.gradle | head -n1 | sed -E 's/.*"([^"]+)".*/\1/' | tr -d '\r\n[:space:]')
           
           echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
@@ -59,7 +67,7 @@ jobs:
             "versionName": "$VERSION_NAME",
             "apkUrl": "https://github.com/${{ github.repository }}/releases/download/v$VERSION_NAME/berrybot-debug.apk",
             "downloadUrl": "https://github.com/${{ github.repository }}/releases/download/v$VERSION_NAME/berrybot-debug.apk",
-            "changelog": "Automated CI/CD build for BerryBot v$VERSION_NAME ($GITHUB_SHA)"
+            "changelog": "Automated CI/CD build for BerryBot v$VERSION_NAME (${GITHUB_SHA:0:7})"
           }
           EOF
           
@@ -69,11 +77,13 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: berrybot-v${{ steps.prep.outputs.version_name }}-debug
-          path: release_dist/*
+          path: |
+            release_dist/berrybot-debug.apk
+            release_dist/version.json
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        if: startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/main'
         with:
           tag_name: v${{ steps.prep.outputs.version_name }}
           name: "BerryBot v${{ steps.prep.outputs.version_name }}"
@@ -93,5 +103,4 @@ jobs:
           files: |
             release_dist/berrybot-debug.apk
             release_dist/version.json
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
