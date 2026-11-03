@@ -1,0 +1,435 @@
+package com.berrybot.update;
+
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.ProgressDialog;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.StrictMode;
+import android.util.Log;
+import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.Toast;
+
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
+/**
+ * OTA (Over-The-Air) Self-Updater for BerryBot.
+ * Polls for new releases, prompts user to update, downloads the APK,
+ * and launches the BlackBerry 10 / Android package installer.
+ * 
+ * Strict Android 4.3 Jelly Bean (API 18) Dalvik runtime compatibility.
+ */
+public class UpdateManager {
+    private static final String TAG = "BerryBot.Update";
+    private static final String PREFS_NAME = "berrybot_prefs";
+    private static final String PREF_UPDATE_URL = "update_manifest_url";
+
+    // Default release endpoint on GitHub
+    public static final String DEFAULT_UPDATE_URL = 
+            "https://raw.githubusercontent.com/nyttevaerdien/berrybot/master/version.json";
+
+    private static volatile UpdateManager instance;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    private UpdateManager() {}
+
+    public static UpdateManager getInstance() {
+        if (instance == null) {
+            synchronized (UpdateManager.class) {
+                if (instance == null) {
+                    instance = new UpdateManager();
+                }
+            }
+        }
+        return instance;
+    }
+
+    public String getUpdateManifestUrl(Context context) {
+        if (context == null) return DEFAULT_UPDATE_URL;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        return prefs.getString(PREF_UPDATE_URL, DEFAULT_UPDATE_URL);
+    }
+
+    public void setUpdateManifestUrl(Context context, String url) {
+        if (context == null || url == null) return;
+        SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        prefs.edit().putString(PREF_UPDATE_URL, url.trim()).commit();
+    }
+
+    public int getCurrentVersionCode(Context context) {
+        try {
+            PackageInfo pInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            return pInfo.versionCode;
+        } catch (Throwable t) {
+            return 1;
+        }
+    }
+
+    public String getCurrentVersionName(Context context) {
+        try {
+            PackageInfo pInfo = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            return pInfo.versionName;
+        } catch (Throwable t) {
+            return "1.0";
+        }
+    }
+
+    /**
+     * Check for updates on a background thread.
+     */
+    public void checkForUpdates(final Activity activity, final boolean userInitiated) {
+        if (activity == null || activity.isFinishing()) return;
+
+        if (userInitiated) {
+            Toast.makeText(activity, "Checking for updates…", Toast.LENGTH_SHORT).show();
+        }
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                checkInternal(activity, userInitiated);
+            }
+        }).start();
+    }
+
+    private void checkInternal(final Activity activity, final boolean userInitiated) {
+        String configuredUrl = getUpdateManifestUrl(activity);
+        String json = fetchUrlWithRedirects(configuredUrl, 0);
+
+        if (json == null || json.length() == 0) {
+            if (userInitiated) {
+                mainHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (activity.isFinishing()) return;
+                        showUnreachableDialog(activity);
+                    }
+                });
+            }
+            return;
+        }
+
+        try {
+            JSONObject obj = new JSONObject(json);
+            final int remoteVersionCode = obj.optInt("versionCode", 0);
+            final String remoteVersionName = obj.optString("versionName", "");
+            
+            // Support both apkUrl and downloadUrl in manifest
+            String url = obj.optString("apkUrl", "");
+            if (url == null || url.length() == 0) {
+                url = obj.optString("downloadUrl", "");
+            }
+            if (url == null || url.length() == 0) {
+                url = obj.optString("shortUrlClck", "");
+            }
+            final String apkUrl = url;
+            final String changelog = obj.optString("changelog", "Performance and stability updates for BlackBerry Classic.");
+
+            final int currentCode = getCurrentVersionCode(activity);
+
+            mainHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (activity.isFinishing()) return;
+                    if (remoteVersionCode > currentCode && apkUrl.length() > 0) {
+                        showUpdateDialog(activity, remoteVersionName, remoteVersionCode, apkUrl, changelog);
+                    } else if (userInitiated) {
+                        Toast.makeText(activity, "BerryBot is up to date (v" + getCurrentVersionName(activity) + ")", Toast.LENGTH_SHORT).show();
+                    }
+                }
+            });
+        } catch (final Throwable t) {
+            Log.w(TAG, "Failed to parse version.json: " + t.getMessage());
+            if (userInitiated) {
+                postToast(activity, "Error parsing update manifest: " + t.getMessage());
+            }
+        }
+    }
+
+    private void showUpdateDialog(final Activity activity, final String newVersionName, final int newVersionCode, final String apkUrl, final String changelog) {
+        new AlertDialog.Builder(activity)
+            .setTitle("BerryBot Update Available (v" + newVersionName + ")")
+            .setMessage("A new version of BerryBot is available!\n\n" + 
+                        "Current: v" + getCurrentVersionName(activity) + " (Build " + getCurrentVersionCode(activity) + ")\n" +
+                        "Latest:  v" + newVersionName + " (Build " + newVersionCode + ")\n\n" +
+                        "What's New:\n" + changelog + "\n\n" +
+                        "Would you like to download and install this update now?")
+            .setPositiveButton("Update Now", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    startDownloadAndInstall(activity, apkUrl, newVersionName);
+                }
+            })
+            .setNeutralButton("Configure URL", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    showConfigureUrlDialog(activity);
+                }
+            })
+            .setNegativeButton("Later", null)
+            .show();
+    }
+
+    private void showUnreachableDialog(final Activity activity) {
+        new AlertDialog.Builder(activity)
+            .setTitle("Update Check Failed")
+            .setMessage("Could not connect to update manifest server.\n\n" +
+                        "Endpoint:\n" + getUpdateManifestUrl(activity) + "\n\n" +
+                        "Would you like to edit the update server URL?")
+            .setPositiveButton("Edit URL", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    showConfigureUrlDialog(activity);
+                }
+            })
+            .setNegativeButton("Close", null)
+            .show();
+    }
+
+    public void showConfigureUrlDialog(final Activity activity) {
+        final EditText input = new EditText(activity);
+        input.setText(getUpdateManifestUrl(activity));
+        input.setSingleLine(true);
+
+        LinearLayout layout = new LinearLayout(activity);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(30, 20, 30, 10);
+        layout.addView(input);
+
+        new AlertDialog.Builder(activity)
+            .setTitle("OTA Update Endpoint URL")
+            .setView(layout)
+            .setPositiveButton("Save & Check", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    String newUrl = input.getText().toString().trim();
+                    if (newUrl.length() > 0) {
+                        setUpdateManifestUrl(activity, newUrl);
+                        checkForUpdates(activity, true);
+                    }
+                }
+            })
+            .setNeutralButton("Reset Default", new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    setUpdateManifestUrl(activity, DEFAULT_UPDATE_URL);
+                    checkForUpdates(activity, true);
+                }
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
+    private void startDownloadAndInstall(final Activity activity, final String apkUrl, final String versionName) {
+        final ProgressDialog progress = new ProgressDialog(activity);
+        progress.setTitle("Downloading Update");
+        progress.setMessage("Downloading BerryBot v" + versionName + "…");
+        progress.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+        progress.setIndeterminate(false);
+        progress.setMax(100);
+        progress.setCancelable(true);
+        progress.show();
+
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                File apkFile = null;
+                boolean success = false;
+                HttpURLConnection conn = null;
+                InputStream in = null;
+                FileOutputStream out = null;
+
+                try {
+                    File cacheDir = activity.getExternalCacheDir();
+                    if (cacheDir == null) cacheDir = activity.getCacheDir();
+                    apkFile = new File(cacheDir, "berrybot-update.apk");
+                    if (apkFile.exists()) {
+                        apkFile.delete();
+                    }
+
+                    // Open connection following HTTP/HTTPS redirects
+                    conn = openConnectionWithRedirects(apkUrl, 0);
+                    int responseCode = conn.getResponseCode();
+                    if (responseCode != HttpURLConnection.HTTP_OK) {
+                        throw new Exception("HTTP response: " + responseCode + " (" + conn.getResponseMessage() + ")");
+                    }
+
+                    int fileLength = conn.getContentLength();
+                    in = conn.getInputStream();
+                    out = new FileOutputStream(apkFile);
+
+                    byte[] data = new byte[8192];
+                    long total = 0;
+                    int count;
+
+                    while ((count = in.read(data)) != -1) {
+                        total += count;
+                        if (fileLength > 0) {
+                            final int progressPercent = (int) (total * 100 / fileLength);
+                            mainHandler.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (progress.isShowing()) {
+                                        progress.setProgress(progressPercent);
+                                    }
+                                }
+                            });
+                        }
+                        out.write(data, 0, count);
+                    }
+
+                    out.flush();
+                    success = true;
+                } catch (final Throwable t) {
+                    Log.e(TAG, "Download failed", t);
+                    mainHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (progress.isShowing()) progress.dismiss();
+                            Toast.makeText(activity, "Download failed: " + t.getMessage(), Toast.LENGTH_LONG).show();
+                        }
+                    });
+                } finally {
+                    try { if (out != null) out.close(); } catch (Exception ignored) {}
+                    try { if (in != null) in.close(); } catch (Exception ignored) {}
+                    if (conn != null) conn.disconnect();
+                }
+
+                if (success && apkFile != null && apkFile.exists()) {
+                    final File finalFile = apkFile;
+                    mainHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (progress.isShowing()) progress.dismiss();
+                            launchPackageInstaller(activity, finalFile);
+                        }
+                    });
+                }
+            }
+        }).start();
+    }
+
+    private HttpURLConnection openConnectionWithRedirects(String urlStr, int redirectCount) throws Exception {
+        if (redirectCount > 6) {
+            throw new Exception("Too many HTTP redirects");
+        }
+        URL url = new URL(urlStr);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setConnectTimeout(15000);
+        conn.setReadTimeout(30000);
+        conn.setInstanceFollowRedirects(false);
+        conn.setRequestProperty("User-Agent", "BerryBot-OTA/1.0");
+        conn.connect();
+
+        int responseCode = conn.getResponseCode();
+        if (responseCode == HttpURLConnection.HTTP_MOVED_PERM 
+                || responseCode == HttpURLConnection.HTTP_MOVED_TEMP
+                || responseCode == HttpURLConnection.HTTP_SEE_OTHER
+                || responseCode == 307 
+                || responseCode == 308) {
+            String location = conn.getHeaderField("Location");
+            conn.disconnect();
+            if (location != null && location.length() > 0) {
+                // If redirect is relative, resolve it
+                if (!location.startsWith("http://") && !location.startsWith("https://")) {
+                    location = new URL(url, location).toString();
+                }
+                return openConnectionWithRedirects(location, redirectCount + 1);
+            }
+        }
+        return conn;
+    }
+
+    private void launchPackageInstaller(Context context, File apkFile) {
+        try {
+            // Guard against StrictMode FileUriExposedException on targetSdk >= 24
+            try {
+                java.lang.reflect.Method m = StrictMode.class.getMethod("disableDeathOnFileUriExposure");
+                m.invoke(null);
+            } catch (Throwable ignored) {}
+
+            // Set world-readable permissions for Android 4.3 Dalvik / BB10 Package Installer
+            apkFile.setReadable(true, false);
+
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(Uri.fromFile(apkFile), "application/vnd.android.package-archive");
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
+        } catch (Throwable t) {
+            Log.e(TAG, "Failed to launch package installer", t);
+            Toast.makeText(context, "Failed to launch installer: " + t.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private String fetchUrlWithRedirects(String urlStr, int redirectCount) {
+        if (redirectCount > 6) return null;
+        HttpURLConnection conn = null;
+        BufferedReader reader = null;
+        try {
+            URL url = new URL(urlStr);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(12000);
+            conn.setInstanceFollowRedirects(false);
+            conn.setRequestProperty("User-Agent", "BerryBot-OTA/1.0");
+
+            int code = conn.getResponseCode();
+            if (code == HttpURLConnection.HTTP_MOVED_PERM 
+                    || code == HttpURLConnection.HTTP_MOVED_TEMP
+                    || code == HttpURLConnection.HTTP_SEE_OTHER
+                    || code == 307 
+                    || code == 308) {
+                String location = conn.getHeaderField("Location");
+                conn.disconnect();
+                if (location != null && location.length() > 0) {
+                    if (!location.startsWith("http://") && !location.startsWith("https://")) {
+                        location = new URL(url, location).toString();
+                    }
+                    return fetchUrlWithRedirects(location, redirectCount + 1);
+                }
+                return null;
+            }
+
+            if (code != HttpURLConnection.HTTP_OK) {
+                return null;
+            }
+
+            reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+            return sb.toString().trim();
+        } catch (Throwable t) {
+            return null;
+        } finally {
+            try { if (reader != null) reader.close(); } catch (Exception ignored) {}
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    private void postToast(final Context context, final String msg) {
+        mainHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show();
+            }
+        });
+    }
+}

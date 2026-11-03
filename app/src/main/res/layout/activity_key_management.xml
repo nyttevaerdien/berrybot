@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/claude_bg"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="BerryBot SSH Keys"
+            android:textColor="@color/claude_coral"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Active OpenSSH Public Key:"
+            android:textColor="@color/claude_cream"
+            android:textSize="12sp"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/etPublicKey"
+            android:layout_width="match_parent"
+            android:layout_height="80dp"
+            android:background="@drawable/key_bg_normal"
+            android:textColor="@color/claude_cream"
+            android:textSize="10sp"
+            android:typeface="monospace"
+            android:gravity="top|left"
+            android:padding="6dp"
+            android:editable="false"
+            android:cursorVisible="false"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <Button
+                android:id="@+id/btnCopyPubkey"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:text="@string/btn_copy_pubkey"
+                android:textColor="@color/claude_cream"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:background="@drawable/key_bg_pressed"
+                android:layout_marginRight="4dp" />
+
+            <Button
+                android:id="@+id/btnGenerateKey"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:text="@string/btn_generate_key"
+                android:textColor="@color/claude_cream"
+                android:textSize="11sp"
+                android:background="@drawable/key_bg_normal"
+                android:layout_marginLeft="4dp" />
+
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/claude_border"
+            android:layout_marginBottom="12dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Import Existing Private Key:"
+            android:textColor="@color/claude_cream"
+            android:textSize="12sp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="(OpenSSH, PKCS#8, or ConnectBot exported key)"
+            android:textColor="@color/claude_cream_dim"
+            android:textSize="10sp"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/etPrivateKeyInput"
+            android:layout_width="match_parent"
+            android:layout_height="90dp"
+            android:background="@drawable/key_bg_normal"
+            android:hint="@string/hint_paste_private_key"
+            android:textColorHint="@color/claude_cream_dim"
+            android:textColor="@color/claude_cream"
+            android:textSize="10sp"
+            android:typeface="monospace"
+            android:gravity="top|left"
+            android:padding="6dp"
+            android:layout_marginBottom="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/btnImportKey"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:text="@string/btn_import_key"
+                android:textColor="@color/claude_cream"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:background="@drawable/key_bg_normal"
+                android:layout_marginRight="4dp" />
+
+            <Button
+                android:id="@+id/btnClose"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:text="@string/btn_close"
+                android:textColor="@color/claude_cream"
+                android:textSize="11sp"
+                android:background="@drawable/key_bg_normal"
+                android:layout_marginLeft="4dp" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</ScrollView>

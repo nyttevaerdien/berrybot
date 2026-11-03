@@ -1,0 +1,7 @@
+.gradle/
+build/
+app/build/
+*.class
+*.apk
+local.properties
+*_qr.png

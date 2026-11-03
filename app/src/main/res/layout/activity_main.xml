@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/claude_bg">
+
+    <!-- Top Status Bar -->
+    <LinearLayout
+        android:id="@+id/statusBar"
+        android:layout_width="match_parent"
+        android:layout_height="32dp"
+        android:orientation="horizontal"
+        android:background="@color/claude_surface"
+        android:gravity="center_vertical"
+        android:paddingLeft="8dp"
+        android:paddingRight="8dp">
+
+        <!-- Unified Connection Button / Menu Trigger -->
+        <LinearLayout
+            android:id="@+id/btnConnection"
+            android:layout_width="0dp"
+            android:layout_height="26dp"
+            android:layout_weight="1"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:background="@drawable/key_bg_selector"
+            android:paddingLeft="8dp"
+            android:paddingRight="8dp"
+            android:layout_marginRight="6dp"
+            android:clickable="true">
+
+            <TextView
+                android:id="@+id/tvStatusDot"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="●"
+                android:textColor="@color/claude_status_yellow"
+                android:textSize="12sp"
+                android:layout_marginRight="5dp" />
+
+            <TextView
+                android:id="@+id/tvStatusText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/status_connecting"
+                android:textColor="@color/claude_cream"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:typeface="monospace"
+                android:singleLine="true" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/btnFontSizeMinus"
+            android:layout_width="28dp"
+            android:layout_height="26dp"
+            android:text="-"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="@color/claude_cream"
+            android:background="@drawable/key_bg_selector"
+            android:layout_marginRight="4dp" />
+
+        <Button
+            android:id="@+id/btnFontSizePlus"
+            android:layout_width="28dp"
+            android:layout_height="26dp"
+            android:text="+"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:textColor="@color/claude_cream"
+            android:background="@drawable/key_bg_selector"
+            android:layout_marginRight="4dp" />
+
+        <Button
+            android:id="@+id/btnSlash"
+            android:layout_width="28dp"
+            android:layout_height="26dp"
+            android:text="/"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="@color/claude_status_yellow"
+            android:background="@drawable/key_bg_selector"
+            android:layout_marginRight="4dp" />
+
+        <Button
+            android:id="@+id/btnCopy"
+            android:layout_width="wrap_content"
+            android:layout_height="26dp"
+            android:text="COPY"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:textColor="@color/claude_cream"
+            android:background="@drawable/key_bg_selector"
+            android:paddingLeft="8dp"
+            android:paddingRight="8dp"
+            android:layout_marginRight="4dp" />
+
+        <Button
+            android:id="@+id/btnPaste"
+            android:layout_width="wrap_content"
+            android:layout_height="26dp"
+            android:text="PASTE"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:textColor="@color/claude_cream"
+            android:background="@drawable/key_bg_selector"
+            android:paddingLeft="8dp"
+            android:paddingRight="8dp" />
+
+    </LinearLayout>
+
+    <!-- Terminal Canvas View -->
+    <com.berrybot.terminal.TerminalView
+        android:id="@+id/terminalView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+
+    <!-- Bottom Touch Key Bar for BlackBerry Classic -->
+    <LinearLayout
+        android:id="@+id/keyBar"
+        android:layout_width="match_parent"
+        android:layout_height="38dp"
+        android:orientation="horizontal"
+        android:background="@color/claude_surface"
+        android:paddingLeft="2dp"
+        android:paddingRight="2dp"
+        android:paddingTop="1dp"
+        android:paddingBottom="1dp">
+
+        <Button
+            android:id="@+id/btnEsc"
+            style="@style/ClaudeKeyButton"
+            android:text="ESC" />
+
+        <Button
+            android:id="@+id/btnTab"
+            style="@style/ClaudeKeyButton"
+            android:text="TAB" />
+
+        <Button
+            android:id="@+id/btnCtrl"
+            style="@style/ClaudeKeyButton"
+            android:text="CTRL" />
+
+        <Button
+            android:id="@+id/btnAlt"
+            style="@style/ClaudeKeyButton"
+            android:text="ALT" />
+
+        <Button
+            android:id="@+id/btnUp"
+            style="@style/ClaudeKeyButton"
+            android:textSize="14sp"
+            android:text="▲" />
+
+        <Button
+            android:id="@+id/btnDown"
+            style="@style/ClaudeKeyButton"
+            android:textSize="14sp"
+            android:text="▼" />
+
+        <Button
+            android:id="@+id/btnLeft"
+            style="@style/ClaudeKeyButton"
+            android:text="◀" />
+
+        <Button
+            android:id="@+id/btnRight"
+            style="@style/ClaudeKeyButton"
+            android:text="▶" />
+
+        <Button
+            android:id="@+id/btnPgUp"
+            style="@style/ClaudeKeyButton"
+            android:text="PG▲" />
+
+        <Button
+            android:id="@+id/btnPgDn"
+            style="@style/ClaudeKeyButton"
+            android:text="PG▼" />
+
+    </LinearLayout>
+
+</LinearLayout>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="claude_bg">#181816</color>
+    <color name="claude_surface">#222220</color>
+    <color name="claude_surface_light">#2D2D2A</color>
+    <color name="claude_border">#383834</color>
+    <color name="claude_coral">#D97757</color>
+    <color name="claude_coral_pressed">#BF5E3E</color>
+    <color name="claude_cream">#F4ECE1</color>
+    <color name="claude_cream_dim">#A59E92</color>
+    <color name="claude_key_bg">#292926</color>
+    <color name="claude_key_pressed">#D97757</color>
+    <color name="claude_key_active">#D97757</color>
+    <color name="claude_status_green">#4EBA6F</color>
+    <color name="claude_status_yellow">#E5C07B</color>
+    <color name="claude_status_red">#E06C75</color>
+</resources>
