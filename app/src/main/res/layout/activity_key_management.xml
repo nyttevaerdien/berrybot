@@ -33,26 +33,63 @@
             android:layout_marginBottom="10dp"
             android:visibility="gone" />
 
-        <TextView
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Active OpenSSH Public Key:"
-            android:textColor="@color/claude_cream"
-            android:textSize="12sp"
-            android:layout_marginBottom="4dp" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="4dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Active OpenSSH Public Key:"
+                android:textColor="@color/claude_cream"
+                android:textSize="12sp" />
+
+            <Button
+                android:id="@+id/btnFontMinus"
+                android:layout_width="36dp"
+                android:layout_height="30dp"
+                android:text="A-"
+                android:textSize="10sp"
+                android:textColor="@color/claude_cream"
+                android:background="@drawable/key_bg_normal"
+                android:layout_marginRight="4dp" />
+
+            <Button
+                android:id="@+id/btnFontPlus"
+                android:layout_width="36dp"
+                android:layout_height="30dp"
+                android:text="A+"
+                android:textSize="10sp"
+                android:textColor="@color/claude_cream"
+                android:background="@drawable/key_bg_normal" />
+
+        </LinearLayout>
 
         <EditText
             android:id="@+id/etPublicKey"
             android:layout_width="match_parent"
-            android:layout_height="80dp"
+            android:layout_height="90dp"
             android:background="@drawable/key_bg_normal"
             android:textColor="@color/claude_cream"
-            android:textSize="11sp"
+            android:textSize="13sp"
             android:typeface="monospace"
             android:gravity="top|left"
             android:padding="6dp"
             android:editable="false"
             android:cursorVisible="false"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvFontLegend"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Font: 0 (slashed zero) • O (capital O) • 1 (one) • l (ell) • I (eye)"
+            android:textColor="@color/claude_cream_dim"
+            android:textSize="9sp"
             android:layout_marginBottom="8dp" />
 
         <LinearLayout
@@ -127,7 +164,7 @@
             android:hint="@string/hint_paste_private_key"
             android:textColorHint="@color/claude_cream_dim"
             android:textColor="@color/claude_cream"
-            android:textSize="11sp"
+            android:textSize="13sp"
             android:typeface="monospace"
             android:gravity="top|left"
             android:padding="6dp"

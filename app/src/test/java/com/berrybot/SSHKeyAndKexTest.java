@@ -224,4 +224,17 @@ public class SSHKeyAndKexTest {
         Assert.assertEquals("Deterministic keys must produce identical OpenSSH public keys", pub1, pub2);
         Assert.assertTrue("Public key must start with ssh-ed25519", pub1.startsWith("ssh-ed25519 "));
     }
+
+    @Test
+    public void printKeyForPhrase() {
+        String phrase = System.getProperty("berrybot.phrase");
+        if (phrase != null && !phrase.isEmpty()) {
+            byte[] seed = com.berrybot.ssh.MnemonicKeyDerivation.deriveSeedFromPassphrase(phrase, null);
+            KeyPair kp = KeyStorage.createEd25519KeyPairFromSeed(seed);
+            String pub = KeyStorage.formatOpenSSHPublicKey(kp.getPublic(), "berrybot@classic");
+            System.out.println("=== DERIVED_OPENSSH_PUBLIC_KEY ===");
+            System.out.println(pub);
+            System.out.println("=== END_KEY ===");
+        }
+    }
 }

@@ -30,6 +30,36 @@ public class KeyManagementActivity extends Activity {
         etPublicKey.setTypeface(monoFont);
         etPrivateKeyInput.setTypeface(monoFont);
 
+        final float[] keyFontSize = new float[] { 13.0f };
+        etPublicKey.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, keyFontSize[0]);
+        etPrivateKeyInput.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, keyFontSize[0]);
+
+        android.widget.TextView tvFontLegend = (android.widget.TextView) findViewById(R.id.tvFontLegend);
+        if (tvFontLegend != null) {
+            tvFontLegend.setTypeface(monoFont);
+        }
+
+        Button btnFontMinus = (Button) findViewById(R.id.btnFontMinus);
+        Button btnFontPlus = (Button) findViewById(R.id.btnFontPlus);
+        if (btnFontMinus != null) {
+            btnFontMinus.setOnClickListener(v -> {
+                if (keyFontSize[0] > 9.0f) {
+                    keyFontSize[0] -= 1.0f;
+                    etPublicKey.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, keyFontSize[0]);
+                    etPrivateKeyInput.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, keyFontSize[0]);
+                }
+            });
+        }
+        if (btnFontPlus != null) {
+            btnFontPlus.setOnClickListener(v -> {
+                if (keyFontSize[0] < 22.0f) {
+                    keyFontSize[0] += 1.0f;
+                    etPublicKey.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, keyFontSize[0]);
+                    etPrivateKeyInput.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, keyFontSize[0]);
+                }
+            });
+        }
+
         Button btnCopyPubkey = (Button) findViewById(R.id.btnCopyPubkey);
         Button btnGenerateKey = (Button) findViewById(R.id.btnGenerateKey);
         Button btnPassphraseKey = (Button) findViewById(R.id.btnPassphraseKey);

@@ -1,7 +1,7 @@
 {
-  "versionCode": 18,
-  "versionName": "1.0.18",
-  "apkUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.18/berrybot-1.0.18.apk",
-  "downloadUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.18/berrybot-1.0.18.apk",
-  "changelog": "BerryBot v1.0.18: Gated first connection behind key settling screen so connection won't fail before key is configured on server; full monospace font with clear 0/O distinction; deterministic seed phrase generation."
+  "versionCode": 19,
+  "versionName": "1.0.19",
+  "apkUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.19/berrybot-1.0.19.apk",
+  "downloadUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.19/berrybot-1.0.19.apk",
+  "changelog": "BerryBot v1.0.19: Switched to Hack Monospace font with slashed zero (0 vs O), stored uncompressed for Android 4.3 Dalvik compatibility, added [A-]/[A+] font sizing buttons on Key screen, disk extract fallback."
 }

@@ -11,8 +11,8 @@ android {
         applicationId "com.berrybot"
         minSdkVersion 18
         targetSdkVersion 33
-        versionCode 18
-        versionName "1.0.18"
+        versionCode 19
+        versionName "1.0.19"
     }
 
     signingConfigs {
@@ -54,6 +54,16 @@ android {
 
     testOptions {
         unitTests.returnDefaultValues = true
+        unitTests.all {
+            systemProperties System.properties
+            testLogging {
+                showStandardStreams = true
+            }
+        }
+    }
+
+    aaptOptions {
+        noCompress 'ttf', 'otf'
     }
 
 
