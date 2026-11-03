@@ -35,11 +35,34 @@ public class KeyManagementActivity extends Activity {
         Button btnPassphraseKey = (Button) findViewById(R.id.btnPassphraseKey);
         Button btnImportKey = (Button) findViewById(R.id.btnImportKey);
         Button btnClose = (Button) findViewById(R.id.btnClose);
+        Button btnConnectNow = (Button) findViewById(R.id.btnConnectNow);
+
+        android.widget.TextView tvSetupNotice = (android.widget.TextView) findViewById(R.id.tvSetupNotice);
+        boolean isFirstRun = getIntent().getBooleanExtra("is_first_run", false);
+        if (tvSetupNotice != null && isFirstRun) {
+            tvSetupNotice.setVisibility(android.view.View.VISIBLE);
+        }
 
         refreshPublicKey();
 
         btnCopyPubkey.setOnClickListener(v -> copyPublicKeyToClipboard());
         btnPassphraseKey.setOnClickListener(v -> showPassphraseDialog());
+
+        if (btnConnectNow != null) {
+            if (isFirstRun) {
+                btnConnectNow.setText("Key Settled — Connect to Server");
+            } else {
+                btnConnectNow.setText("Save & Reconnect");
+            }
+            btnConnectNow.setOnClickListener(v -> {
+                getSharedPreferences("berrybot_prefs", MODE_PRIVATE)
+                    .edit()
+                    .putBoolean("key_setup_settled", true)
+                    .commit();
+                setResult(RESULT_OK);
+                finish();
+            });
+        }
 
         btnGenerateKey.setOnClickListener(v -> {
             new AlertDialog.Builder(this)
@@ -78,7 +101,12 @@ public class KeyManagementActivity extends Activity {
             }
         });
 
-        btnClose.setOnClickListener(v -> finish());
+        btnClose.setOnClickListener(v -> {
+            if (isFirstRun) {
+                setResult(RESULT_CANCELED);
+            }
+            finish();
+        });
     }
 
     private void refreshPublicKey() {
@@ -91,7 +119,7 @@ public class KeyManagementActivity extends Activity {
         if (pub.isEmpty()) return;
 
         ClipboardHelper.copyToClipboard(this, "BerryBot Public Key", pub);
-        Toast.makeText(this, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, "Public key copied to clipboard! Paste into server's ~/.ssh/authorized_keys, then tap Connect.", Toast.LENGTH_LONG).show();
     }
 
     private void showPassphraseDialog() {

@@ -65,6 +65,8 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
     private Button btnFontSizePlus;
     private Button btnSlash;
 
+    private static final int REQUEST_CODE_KEY_SETUP = 1001;
+
     // Power & Screen Management
     private static final long SCREEN_ON_STREAMING_TIMEOUT_MS = 30000; // 30s idle screen dimming
     private final android.os.Handler mainHandler = new android.os.Handler(android.os.Looper.getMainLooper());
@@ -141,8 +143,17 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
         initViews();
         setupKeyBar();
 
-        // Connect automatically on startup
-        connectionManager.connect();
+        // Connect automatically on startup only if key has been settled
+        android.content.SharedPreferences prefs = getSharedPreferences("berrybot_prefs", MODE_PRIVATE);
+        boolean keySettled = prefs.getBoolean("key_setup_settled", false);
+        if (!keySettled) {
+            onConnectionStateChanged(SSHConnectionManager.ConnectionState.DISCONNECTED, "Setup: Settle SSH key before connecting");
+            android.content.Intent intent = new android.content.Intent(this, KeyManagementActivity.class);
+            intent.putExtra("is_first_run", true);
+            startActivityForResult(intent, REQUEST_CODE_KEY_SETUP);
+        } else {
+            connectionManager.connect();
+        }
 
         // Silent background OTA update check
         UpdateManager.getInstance().checkForUpdates(this, false);
@@ -264,14 +275,21 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
             .setTitle("BerryBot Menu • " + (lastStatusMessage != null ? lastStatusMessage : "Menu"))
             .setItems(options, (dialog, which) -> {
                 if (which == 0) {
-                    Toast.makeText(this, "Reconnecting...", Toast.LENGTH_SHORT).show();
-                    connectionManager.connect();
-                    if (terminalView != null) terminalView.requestFocus();
+                    android.content.SharedPreferences prefs = getSharedPreferences("berrybot_prefs", MODE_PRIVATE);
+                    if (!prefs.getBoolean("key_setup_settled", false)) {
+                        Intent intent = new Intent(this, KeyManagementActivity.class);
+                        intent.putExtra("is_first_run", true);
+                        startActivityForResult(intent, REQUEST_CODE_KEY_SETUP);
+                    } else {
+                        Toast.makeText(this, "Reconnecting...", Toast.LENGTH_SHORT).show();
+                        connectionManager.connect();
+                        if (terminalView != null) terminalView.requestFocus();
+                    }
                 } else if (which == 1) {
                     showServerConfigDialog();
                 } else if (which == 2) {
                     Intent intent = new Intent(this, KeyManagementActivity.class);
-                    startActivity(intent);
+                    startActivityForResult(intent, REQUEST_CODE_KEY_SETUP);
                 } else if (which == 3) {
                     UpdateManager.getInstance().checkForUpdates(this, true);
                 } else if (which == 4) {
@@ -678,6 +696,24 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
     }
 
     @Override
+    protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_CODE_KEY_SETUP) {
+            if (resultCode == RESULT_OK) {
+                if (connectionManager != null) {
+                    connectionManager.connect();
+                }
+            } else {
+                android.content.SharedPreferences prefs = getSharedPreferences("berrybot_prefs", MODE_PRIVATE);
+                boolean keySettled = prefs.getBoolean("key_setup_settled", false);
+                if (!keySettled) {
+                    onConnectionStateChanged(SSHConnectionManager.ConnectionState.DISCONNECTED, "Key setup pending. Tap here or Keys menu to configure key.");
+                }
+            }
+        }
+    }
+
+    @Override
     protected void onDestroy() {
         super.onDestroy();
         if (ledNotificationManager != null) {
@@ -745,7 +781,7 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
                         break;
                     case DISCONNECTED:
                     default:
-                        if (message != null && message.startsWith("Offline")) {
+                        if (message != null && !message.isEmpty()) {
                             tvStatusText.setText(message);
                         } else {
                             tvStatusText.setText("Disconnected");
