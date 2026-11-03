@@ -330,6 +330,13 @@ public class UpdateManager {
         }
         URL url = new URL(urlStr);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        if (conn instanceof javax.net.ssl.HttpsURLConnection) {
+            try {
+                ((javax.net.ssl.HttpsURLConnection) conn).setSSLSocketFactory(new TLSSocketFactory());
+            } catch (Throwable t) {
+                Log.w(TAG, "Failed to apply TLSSocketFactory: " + t.getMessage());
+            }
+        }
         conn.setConnectTimeout(15000);
         conn.setReadTimeout(30000);
         conn.setInstanceFollowRedirects(false);
@@ -383,6 +390,13 @@ public class UpdateManager {
         try {
             URL url = new URL(urlStr);
             conn = (HttpURLConnection) url.openConnection();
+            if (conn instanceof javax.net.ssl.HttpsURLConnection) {
+                try {
+                    ((javax.net.ssl.HttpsURLConnection) conn).setSSLSocketFactory(new TLSSocketFactory());
+                } catch (Throwable t) {
+                    Log.w(TAG, "Failed to apply TLSSocketFactory: " + t.getMessage());
+                }
+            }
             conn.setConnectTimeout(8000);
             conn.setReadTimeout(12000);
             conn.setInstanceFollowRedirects(false);
