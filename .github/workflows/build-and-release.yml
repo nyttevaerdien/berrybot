@@ -51,7 +51,6 @@ jobs:
         id: prep
         run: |
           mkdir -p release_dist
-          cp app/build/outputs/apk/debug/app-debug.apk release_dist/berrybot-debug.apk
           
           # Extract version from app/build.gradle safely
           VERSION_CODE=$(grep -E '^\s*versionCode' app/build.gradle | head -n1 | awk '{print $2}' | tr -d '\r\n[:space:]')
@@ -60,13 +59,19 @@ jobs:
           echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
           
+          # Produce cleanly named APK artifacts
+          cp app/build/outputs/apk/debug/app-debug.apk "release_dist/berrybot-${VERSION_NAME}.apk"
+          cp "release_dist/berrybot-${VERSION_NAME}.apk" "release_dist/berrybot.${VERSION_NAME}.apk"
+          cp "release_dist/berrybot-${VERSION_NAME}.apk" release_dist/berrybot.apk
+          cp "release_dist/berrybot-${VERSION_NAME}.apk" release_dist/berrybot-debug.apk
+          
           # Generate version.json manifest for in-app OTA updates
           cat <<EOF > release_dist/version.json
           {
             "versionCode": $VERSION_CODE,
             "versionName": "$VERSION_NAME",
-            "apkUrl": "https://github.com/${{ github.repository }}/releases/download/v$VERSION_NAME/berrybot-debug.apk",
-            "downloadUrl": "https://github.com/${{ github.repository }}/releases/download/v$VERSION_NAME/berrybot-debug.apk",
+            "apkUrl": "https://github.com/${{ github.repository }}/releases/download/v$VERSION_NAME/berrybot-$VERSION_NAME.apk",
+            "downloadUrl": "https://github.com/${{ github.repository }}/releases/download/v$VERSION_NAME/berrybot-$VERSION_NAME.apk",
             "changelog": "Automated CI/CD build for BerryBot v$VERSION_NAME (${GITHUB_SHA:0:7})"
           }
           EOF
@@ -76,8 +81,11 @@ jobs:
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: berrybot-v${{ steps.prep.outputs.version_name }}-debug
+          name: berrybot-${{ steps.prep.outputs.version_name }}
           path: |
+            release_dist/berrybot-${{ steps.prep.outputs.version_name }}.apk
+            release_dist/berrybot.${{ steps.prep.outputs.version_name }}.apk
+            release_dist/berrybot.apk
             release_dist/berrybot-debug.apk
             release_dist/version.json
 
@@ -93,7 +101,7 @@ jobs:
             Optimized SSH client for BlackBerry Classic (Android 4.3 / API 18 Dalvik) connecting to remote Antigravity CLI tmux session.
             
             ### Included Assets:
-            - **berrybot-debug.apk**: Ready to install directly on BlackBerry 10.
+            - **berrybot-${{ steps.prep.outputs.version_name }}.apk**: Release package for BlackBerry 10 / Android 4.3.
             - **version.json**: OTA update manifest for in-app auto-updates.
             
             ### Changes:
@@ -101,6 +109,9 @@ jobs:
           draft: false
           prerelease: false
           files: |
+            release_dist/berrybot-${{ steps.prep.outputs.version_name }}.apk
+            release_dist/berrybot.${{ steps.prep.outputs.version_name }}.apk
+            release_dist/berrybot.apk
             release_dist/berrybot-debug.apk
             release_dist/version.json
           token: ${{ secrets.GITHUB_TOKEN }}
