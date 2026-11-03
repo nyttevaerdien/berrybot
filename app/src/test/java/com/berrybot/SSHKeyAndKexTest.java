@@ -192,4 +192,36 @@ public class SSHKeyAndKexTest {
         Assert.assertTrue("Public key must start with ssh-ed25519", openSshPub.startsWith("ssh-ed25519 "));
         Assert.assertTrue("Public key must end with nickname", openSshPub.endsWith(" berrybot@classic"));
     }
+
+    @Test
+    public void testDeterministicSeedDerivationFromPhrase() {
+        String phrase = "correct horse battery staple";
+        byte[] seed1 = com.berrybot.ssh.MnemonicKeyDerivation.deriveSeedFromPassphrase(phrase, null);
+        byte[] seed2 = com.berrybot.ssh.MnemonicKeyDerivation.deriveSeedFromPassphrase(phrase, null);
+
+        Assert.assertNotNull("Seed must not be null", seed1);
+        Assert.assertEquals("Seed length must be 32 bytes", 32, seed1.length);
+        Assert.assertArrayEquals("Same phrase must produce identical seed", seed1, seed2);
+
+        // Case insensitivity & whitespace trimming
+        byte[] seedNormalized = com.berrybot.ssh.MnemonicKeyDerivation.deriveSeedFromPassphrase("  Correct  Horse  Battery Staple  ", null);
+        Assert.assertArrayEquals("Normalization must yield identical seed", seed1, seedNormalized);
+    }
+
+    @Test
+    public void testDeterministicEd25519KeyConsistency() throws Exception {
+        String phrase = "abandon ability able about above absent absorb abstract absurd abuse access accident";
+        byte[] seed = com.berrybot.ssh.MnemonicKeyDerivation.deriveSeedFromPassphrase(phrase, null);
+        KeyPair kp1 = KeyStorage.createEd25519KeyPairFromSeed(seed);
+        KeyPair kp2 = KeyStorage.createEd25519KeyPairFromSeed(seed);
+
+        Assert.assertNotNull("KeyPair 1 must not be null", kp1);
+        Assert.assertNotNull("KeyPair 2 must not be null", kp2);
+
+        String pub1 = KeyStorage.formatOpenSSHPublicKey(kp1.getPublic(), "berrybot@classic");
+        String pub2 = KeyStorage.formatOpenSSHPublicKey(kp2.getPublic(), "berrybot@classic");
+
+        Assert.assertEquals("Deterministic keys must produce identical OpenSSH public keys", pub1, pub2);
+        Assert.assertTrue("Public key must start with ssh-ed25519", pub1.startsWith("ssh-ed25519 "));
+    }
 }

@@ -29,6 +29,7 @@ public class KeyStorage {
     private static final String KEY_PUB_X509 = "pub_key_x509";
     private static final String KEY_RAW_PEM = "raw_pem_key";
     private static final String KEY_NICKNAME = "key_nickname";
+    private static final String KEY_PASSPHRASE = "key_passphrase";
     private static final String PREF_KEY_STORAGE_VERSION = "key_storage_version";
     private static final int CURRENT_KEY_STORAGE_VERSION = 3;
 
@@ -147,6 +148,33 @@ public class KeyStorage {
             Log.e(TAG, "Failed to generate Ed25519 key", e);
             return false;
         }
+    }
+
+    /**
+     * Generates a deterministic Ed25519 keypair from a seed phrase or user passphrase.
+     * The exact same phrase will always generate the exact same public key across reinstalls.
+     */
+    public synchronized boolean generateDeterministicKeyFromPhrase(String phrase, String nickname) {
+        if (phrase == null || phrase.trim().isEmpty()) return false;
+        byte[] seed = MnemonicKeyDerivation.deriveSeedFromPassphrase(phrase, null);
+        if (seed == null) return false;
+        try {
+            KeyPair kp = createEd25519KeyPairFromSeed(seed);
+            if (kp != null && kp.getPrivate() != null) {
+                String normalized = phrase.trim().replaceAll("\\s+", " ").toLowerCase();
+                prefs.edit().putString(KEY_PASSPHRASE, normalized).commit();
+                saveKeyPair(kp, nickname != null ? nickname : "berrybot@classic", null);
+                currentKeyPair = kp;
+                return true;
+            }
+        } finally {
+            Arrays.fill(seed, (byte) 0);
+        }
+        return false;
+    }
+
+    public synchronized String getSavedPassphrase() {
+        return prefs.getString(KEY_PASSPHRASE, null);
     }
 
     public synchronized boolean importPrivateKey(String keyData, String password, String nickname) {

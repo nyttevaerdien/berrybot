@@ -46,7 +46,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="8dp">
 
             <Button
                 android:id="@+id/btnCopyPubkey"
@@ -72,6 +72,17 @@
                 android:layout_marginLeft="4dp" />
 
         </LinearLayout>
+
+        <Button
+            android:id="@+id/btnPassphraseKey"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:text="Seed Phrase / Passphrase Key"
+            android:textColor="@color/claude_cream"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:background="@drawable/key_bg_normal"
+            android:layout_marginBottom="14dp" />
 
         <View
             android:layout_width="match_parent"

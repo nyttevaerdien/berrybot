@@ -27,12 +27,14 @@ public class KeyManagementActivity extends Activity {
 
         Button btnCopyPubkey = (Button) findViewById(R.id.btnCopyPubkey);
         Button btnGenerateKey = (Button) findViewById(R.id.btnGenerateKey);
+        Button btnPassphraseKey = (Button) findViewById(R.id.btnPassphraseKey);
         Button btnImportKey = (Button) findViewById(R.id.btnImportKey);
         Button btnClose = (Button) findViewById(R.id.btnClose);
 
         refreshPublicKey();
 
         btnCopyPubkey.setOnClickListener(v -> copyPublicKeyToClipboard());
+        btnPassphraseKey.setOnClickListener(v -> showPassphraseDialog());
 
         btnGenerateKey.setOnClickListener(v -> {
             new AlertDialog.Builder(this)
@@ -85,5 +87,52 @@ public class KeyManagementActivity extends Activity {
 
         ClipboardHelper.copyToClipboard(this, "BerryBot Public Key", pub);
         Toast.makeText(this, R.string.copied_to_clipboard, Toast.LENGTH_SHORT).show();
+    }
+
+    private void showPassphraseDialog() {
+        final EditText input = new EditText(this);
+        String saved = keyStorage.getSavedPassphrase();
+        if (saved != null) {
+            input.setText(saved);
+        } else {
+            input.setHint("12 words or a memorable secret sentence");
+        }
+        input.setMinLines(3);
+        input.setGravity(android.view.Gravity.TOP | android.view.Gravity.LEFT);
+
+        Button btnGen12 = new Button(this);
+        btnGen12.setText("Generate 12 Random Words");
+        btnGen12.setOnClickListener(v -> {
+            String words = com.berrybot.ssh.MnemonicKeyDerivation.generate12WordMnemonic(this);
+            input.setText(words);
+        });
+
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(24, 16, 24, 8);
+        layout.addView(input);
+        layout.addView(btnGen12);
+
+        new AlertDialog.Builder(this)
+            .setTitle("Deterministic Key / Seed Phrase")
+            .setMessage("Derive your SSH key from a seed phrase or custom phrase. The exact same phrase will always generate the exact same public key across reinstalls.")
+            .setView(layout)
+            .setPositiveButton("Apply Key", (dialog, which) -> {
+                String phrase = input.getText().toString().trim();
+                if (phrase.isEmpty()) {
+                    Toast.makeText(this, "Phrase cannot be empty", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                boolean success = keyStorage.generateDeterministicKeyFromPhrase(phrase, "berrybot@classic");
+                if (success) {
+                    refreshPublicKey();
+                    copyPublicKeyToClipboard();
+                    Toast.makeText(this, "Permanent key applied and copied to clipboard!", Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(this, "Failed to derive key from phrase", Toast.LENGTH_SHORT).show();
+                }
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
     }
 }
