@@ -1,7 +1,7 @@
 {
-  "versionCode": 16,
-  "versionName": "1.0.16",
-  "apkUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.16/berrybot-1.0.16.apk",
-  "downloadUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.16/berrybot-1.0.16.apk",
-  "changelog": "BerryBot v1.0.16: Deterministic Seed Phrase & Passphrase key derivation (BIP-39), permanent project keystore, TLSSocketFactory TLS 1.2 on Android 4.3."
+  "versionCode": 17,
+  "versionName": "1.0.17",
+  "apkUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.17/berrybot-1.0.17.apk",
+  "downloadUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.17/berrybot-1.0.17.apk",
+  "changelog": "BerryBot v1.0.17: Applied DejaVuSansMono.ttf across Key Management for clear 0/O and 1/l distinction, enabled assets packaging, deterministic seed phrases."
 }

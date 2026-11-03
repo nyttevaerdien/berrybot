@@ -71,16 +71,7 @@ public class TerminalBridge {
     }
 
     private void initPaints() {
-        try {
-            if (context != null && context.getAssets() != null) {
-                typeface = Typeface.createFromAsset(context.getAssets(), "fonts/DejaVuSansMono.ttf");
-            } else {
-                typeface = Typeface.MONOSPACE;
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "Could not load DejaVuSansMono.ttf, falling back to MONOSPACE", e);
-            typeface = Typeface.MONOSPACE;
-        }
+        typeface = com.berrybot.util.FontHelper.getMonospaceTypeface(context);
 
         float density = 2.0f;
         if (context != null && context.getResources() != null && context.getResources().getDisplayMetrics() != null) {

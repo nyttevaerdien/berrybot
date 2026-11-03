@@ -441,7 +441,7 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
         if (text != null && !text.isEmpty()) {
             et.setText(text);
         }
-        et.setTypeface(android.graphics.Typeface.MONOSPACE);
+        et.setTypeface(com.berrybot.util.FontHelper.getMonospaceTypeface(this));
         et.setTextSize(textSizeSp);
         et.setTextColor(getResources().getColor(R.color.claude_cream));
         et.setBackgroundColor(getResources().getColor(R.color.claude_bg));

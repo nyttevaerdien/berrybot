@@ -22,8 +22,13 @@ public class KeyManagementActivity extends Activity {
 
         keyStorage = new KeyStorage(this);
 
+        android.graphics.Typeface monoFont = com.berrybot.util.FontHelper.getMonospaceTypeface(this);
+
         etPublicKey = (EditText) findViewById(R.id.etPublicKey);
         etPrivateKeyInput = (EditText) findViewById(R.id.etPrivateKeyInput);
+
+        etPublicKey.setTypeface(monoFont);
+        etPrivateKeyInput.setTypeface(monoFont);
 
         Button btnCopyPubkey = (Button) findViewById(R.id.btnCopyPubkey);
         Button btnGenerateKey = (Button) findViewById(R.id.btnGenerateKey);
@@ -91,6 +96,7 @@ public class KeyManagementActivity extends Activity {
 
     private void showPassphraseDialog() {
         final EditText input = new EditText(this);
+        input.setTypeface(com.berrybot.util.FontHelper.getMonospaceTypeface(this));
         String saved = keyStorage.getSavedPassphrase();
         if (saved != null) {
             input.setText(saved);
