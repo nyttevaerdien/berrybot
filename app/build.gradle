@@ -11,8 +11,8 @@ android {
         applicationId "com.berrybot"
         minSdkVersion 18
         targetSdkVersion 33
-        versionCode 26
-        versionName "1.0.26"
+        versionCode 27
+        versionName "1.0.27"
     }
 
     signingConfigs {

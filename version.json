@@ -1,7 +1,7 @@
 {
-  "versionCode": 26,
-  "versionName": "1.0.26",
-  "apkUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.26/berrybot-1.0.26.apk",
-  "downloadUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.26/berrybot-1.0.26.apk",
-  "changelog": "BerryBot v1.0.26: Persist & prefill passphrase across dialog opens; add 'Apply & Connect' button; auto-save & connect on Back/Close; auto-reload active key on connect."
+  "versionCode": 27,
+  "versionName": "1.0.27",
+  "apkUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.27/berrybot-1.0.27.apk",
+  "downloadUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.27/berrybot-1.0.27.apk",
+  "changelog": "BerryBot v1.0.27: Roll back SSH connection manager to rock-solid v1.0.22 baseline; remove socket ProxyData override that stalled handshakes; restore stable Trilead SSH2 socket transport."
 }
