@@ -39,9 +39,16 @@ public class UpdateManager {
     private static final String PREFS_NAME = "berrybot_prefs";
     private static final String PREF_UPDATE_URL = "update_manifest_url";
 
-    // Default release endpoint on GitHub
+    // Default release endpoint via jsDelivr CDN (mirrors GitHub in real-time and supports Android 4.3 cipher suites & TLS 1.2)
     public static final String DEFAULT_UPDATE_URL = 
-            "https://raw.githubusercontent.com/nyttevaerdien/berrybot/master/version.json";
+            "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@master/version.json";
+
+    public static final String[] FALLBACK_UPDATE_URLS = new String[] {
+            "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@master/version.json",
+            "https://fastly.jsdelivr.net/gh/nyttevaerdien/berrybot@master/version.json",
+            "https://gcore.jsdelivr.net/gh/nyttevaerdien/berrybot@master/version.json",
+            "https://raw.githubusercontent.com/nyttevaerdien/berrybot/master/version.json"
+    };
 
     public static final javax.net.ssl.HostnameVerifier HOSTNAME_VERIFIER = new javax.net.ssl.HostnameVerifier() {
         @Override
@@ -51,6 +58,11 @@ public class UpdateManager {
             if (lower.endsWith(".githubusercontent.com") 
                     || lower.endsWith(".github.com") 
                     || lower.endsWith(".github.io")
+                    || lower.endsWith(".jsdelivr.net")
+                    || lower.equals("jsdelivr.net")
+                    || lower.equals("cdn.jsdelivr.net")
+                    || lower.equals("fastly.jsdelivr.net")
+                    || lower.equals("gcore.jsdelivr.net")
                     || lower.equals("github.com")
                     || lower.equals("raw.githubusercontent.com")
                     || lower.equals("objects.githubusercontent.com")) {
@@ -90,7 +102,13 @@ public class UpdateManager {
     public String getUpdateManifestUrl(Context context) {
         if (context == null) return DEFAULT_UPDATE_URL;
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        return prefs.getString(PREF_UPDATE_URL, DEFAULT_UPDATE_URL);
+        String url = prefs.getString(PREF_UPDATE_URL, DEFAULT_UPDATE_URL);
+        // Automatically migrate legacy raw.githubusercontent.com which lacks Android 4.3 cipher suites
+        if (url != null && (url.contains("raw.githubusercontent.com/nyttevaerdien/berrybot") || url.contains("github.com/nyttevaerdien/berrybot/raw"))) {
+            url = DEFAULT_UPDATE_URL;
+            prefs.edit().putString(PREF_UPDATE_URL, url).commit();
+        }
+        return url;
     }
 
     public void setUpdateManifestUrl(Context context, String url) {
@@ -139,6 +157,19 @@ public class UpdateManager {
         String configuredUrl = getUpdateManifestUrl(activity);
         lastFetchError = null;
         String json = fetchUrlWithRedirects(configuredUrl, 0);
+
+        if (json == null || json.length() == 0) {
+            // If primary endpoint failed (e.g. SSL error on raw.githubusercontent.com), try CDN fallbacks
+            for (String fallbackUrl : FALLBACK_UPDATE_URLS) {
+                if (!fallbackUrl.equals(configuredUrl)) {
+                    Log.i(TAG, "Attempting fallback update URL: " + fallbackUrl);
+                    json = fetchUrlWithRedirects(fallbackUrl, 0);
+                    if (json != null && json.length() > 0) {
+                        break;
+                    }
+                }
+            }
+        }
 
         if (json == null || json.length() == 0) {
             if (userInitiated) {
@@ -297,11 +328,41 @@ public class UpdateManager {
                         apkFile.delete();
                     }
 
-                    // Open connection following HTTP/HTTPS redirects
-                    conn = openConnectionWithRedirects(apkUrl, 0);
-                    int responseCode = conn.getResponseCode();
-                    if (responseCode != HttpURLConnection.HTTP_OK) {
-                        throw new Exception("HTTP response: " + responseCode + " (" + conn.getResponseMessage() + ")");
+                    // Determine candidate download URLs (prioritizing jsDelivr CDN branch for Android 4.3 SSL compatibility)
+                    java.util.List<String> downloadCandidates = new java.util.ArrayList<String>();
+                    if (apkUrl != null && apkUrl.contains("jsdelivr.net")) {
+                        downloadCandidates.add(apkUrl);
+                    } else {
+                        downloadCandidates.add("https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@release-apk/berrybot.apk");
+                        downloadCandidates.add("https://fastly.jsdelivr.net/gh/nyttevaerdien/berrybot@release-apk/berrybot.apk");
+                        if (apkUrl != null && apkUrl.length() > 0) {
+                            downloadCandidates.add(apkUrl);
+                        }
+                    }
+
+                    Throwable lastDownloadException = null;
+                    for (String candidate : downloadCandidates) {
+                        try {
+                            if (conn != null) {
+                                try { conn.disconnect(); } catch (Throwable ignored) {}
+                            }
+                            Log.i(TAG, "Attempting APK download from: " + candidate);
+                            conn = openConnectionWithRedirects(candidate, 0);
+                            int responseCode = conn.getResponseCode();
+                            if (responseCode == HttpURLConnection.HTTP_OK) {
+                                lastDownloadException = null;
+                                break;
+                            } else {
+                                throw new Exception("HTTP response: " + responseCode + " (" + conn.getResponseMessage() + ")");
+                            }
+                        } catch (Throwable t) {
+                            Log.w(TAG, "Candidate download failed (" + candidate + "): " + t.getMessage());
+                            lastDownloadException = t;
+                        }
+                    }
+
+                    if (lastDownloadException != null || conn == null) {
+                        throw (lastDownloadException != null ? lastDownloadException : new Exception("Unable to establish APK download connection"));
                     }
 
                     final int fileLength = conn.getContentLength();

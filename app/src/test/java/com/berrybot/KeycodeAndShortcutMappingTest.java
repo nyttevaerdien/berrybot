@@ -147,11 +147,21 @@ public class KeycodeAndShortcutMappingTest {
     }
 
     @Test
-    public void testShiftDelSendsForwardDelete() {
+    public void testShiftDelSendsBackspace() {
         networkBytes.reset();
         boolean handled = view.handleKeyEvent(KeyEvent.KEYCODE_DEL, false, false, true, 0);
         Assert.assertTrue("Shift+DEL should be handled", handled);
-        Assert.assertEquals("Shift+DEL should send VT forward delete sequence", "\033[3~", getSentText());
+        byte[] sent = networkBytes.toByteArray();
+        Assert.assertEquals("Shift+DEL on BlackBerry hardware must delete left with 0x7F, not forward delete", 0x7F, sent[0] & 0xFF);
+    }
+
+    @Test
+    public void testForwardDelKeycodeSendsBackspace() {
+        networkBytes.reset();
+        boolean handled = view.handleKeyEvent(KeyEvent.KEYCODE_FORWARD_DEL, false, false, false, 0);
+        Assert.assertTrue("KEYCODE_FORWARD_DEL should be handled as backspace", handled);
+        byte[] sent = networkBytes.toByteArray();
+        Assert.assertEquals("KEYCODE_FORWARD_DEL must produce 0x7F (delete left)", 0x7F, sent[0] & 0xFF);
     }
 
     @Test

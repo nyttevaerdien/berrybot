@@ -309,6 +309,7 @@ public class TerminalView extends View {
     public void sendBackspace() {
         if (bridge != null) {
             bridge.sendBackspace();
+            triggerKeystrokeHaptic();
             postInvalidateImmediate();
         }
     }
@@ -399,24 +400,19 @@ public class TerminalView extends View {
         }
 
         // Standard terminal keys
-        if (keyCode == KeyEvent.KEYCODE_DEL || keyCode == 67) {
+        // On BlackBerry Classic hardware keyboard, Del / Backspace must ALWAYS delete to the left (0x7F)
+        // Never send forward-delete (\033[3~) which deletes to the right.
+        if (keyCode == KeyEvent.KEYCODE_DEL || keyCode == 67 || keyCode == KeyEvent.KEYCODE_FORWARD_DEL || keyCode == 112) {
             if (isAlt || altSticky) {
                 // Alt+DEL sends ESC + DEL (\033\u007f - kill word backward)
                 bridge.sendString("\033\u007f");
                 triggerKeystrokeHaptic();
-            } else if (isShift) {
-                // Shift+DEL sends Forward Delete (ESC [ 3 ~)
-                bridge.sendDelete();
-                triggerKeystrokeHaptic();
             } else {
-                // Standard Backspace sends ASCII 127 (0x7F / DEL) for Linux readline/tmux
+                // Standard Backspace sends ASCII 127 (0x7F / DEL) for Linux readline/tmux/agy
+                // Deletes backward to the left regardless of Shift state or keycode alias
                 bridge.sendBackspace();
+                triggerKeystrokeHaptic();
             }
-            consumeModifiersAfterKey();
-            postInvalidateImmediate();
-            return true;
-        } else if (keyCode == KeyEvent.KEYCODE_FORWARD_DEL || keyCode == 112) {
-            bridge.sendDelete();
             consumeModifiersAfterKey();
             postInvalidateImmediate();
             return true;
@@ -633,14 +629,12 @@ public class TerminalView extends View {
             boolean isCtrl = isCtrlActive(event);
             boolean isShift = event.isShiftPressed();
 
-            if (keyCode == KeyEvent.KEYCODE_DEL || keyCode == 67) {
+            if (keyCode == KeyEvent.KEYCODE_DEL || keyCode == 67 || keyCode == KeyEvent.KEYCODE_FORWARD_DEL || keyCode == 112) {
                 if (isAlt) {
                     if (bridge != null) {
                         bridge.sendString("\033\u007f"); // Kill word backward
                     }
                     triggerKeystrokeHaptic();
-                } else if (isShift) {
-                    sendDelete();
                 } else {
                     sendBackspace();
                 }

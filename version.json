@@ -1,7 +1,8 @@
 {
-  "versionCode": 27,
-  "versionName": "1.0.27",
-  "apkUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.27/berrybot-1.0.27.apk",
-  "downloadUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.27/berrybot-1.0.27.apk",
-  "changelog": "BerryBot v1.0.27: Roll back SSH connection manager to rock-solid v1.0.22 baseline; remove socket ProxyData override that stalled handshakes; restore stable Trilead SSH2 socket transport."
+  "versionCode": 28,
+  "versionName": "1.0.28",
+  "apkUrl": "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@release-apk/berrybot.apk",
+  "downloadUrl": "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@release-apk/berrybot.apk",
+  "fallbackUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.28/berrybot-1.0.28.apk",
+  "changelog": "BerryBot v1.0.28: Fix Backspace deleting to the right (strict backward deletion on physical keyboard and prevent accidental forward-del); switch OTA update manifest and APK download to jsDelivr CDN with legacy cipher support (fixes SSLHandshakeException on Android 4.3)."
 }

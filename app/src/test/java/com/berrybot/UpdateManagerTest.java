@@ -70,11 +70,12 @@ public class UpdateManagerTest {
     public void testDefaultUpdateUrlConstants() {
         Assert.assertNotNull(UpdateManager.DEFAULT_UPDATE_URL);
         Assert.assertTrue(UpdateManager.DEFAULT_UPDATE_URL.startsWith("https://"));
+        Assert.assertTrue(UpdateManager.DEFAULT_UPDATE_URL.contains("jsdelivr.net"));
         Assert.assertTrue(UpdateManager.DEFAULT_UPDATE_URL.contains("nyttevaerdien/berrybot"));
     }
 
     @Test
-    public void testTLSSocketFactoryConnectionToGithub() {
+    public void testTLSSocketFactoryConnectionToCdn() {
         try {
             java.net.URL url = new java.net.URL(UpdateManager.DEFAULT_UPDATE_URL);
             java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
@@ -87,7 +88,7 @@ public class UpdateManagerTest {
             conn.setReadTimeout(8000);
             conn.setRequestProperty("User-Agent", "BerryBot-OTA/1.0");
             int code = conn.getResponseCode();
-            Assert.assertEquals("Should successfully reach GitHub update manifest", 200, code);
+            Assert.assertEquals("Should successfully reach jsDelivr CDN update manifest", 200, code);
             conn.disconnect();
         } catch (Exception e) {
             System.out.println("Live test skipped or network issue: " + e.getMessage());
