@@ -73,11 +73,16 @@ public class HapticHelper {
         performTick(20);
     }
 
+    private long lastAlertPatternTime = 0;
+
     public void performAlertPattern() {
         if (!isHapticEnabled()) return;
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - lastAlertPatternTime < 2000) return; // Debounce terminal bell vibrations
+        lastAlertPatternTime = now;
         try {
             if (vibrator != null && vibrator.hasVibrator()) {
-                vibrator.vibrate(new long[]{0, 30, 60, 30}, -1);
+                vibrator.vibrate(15); // Subtle 15ms tactile feedback instead of jarring double-buzz
             }
         } catch (Throwable t) {
             Log.w(TAG, "Vibrate alert pattern failed: " + t.getMessage());

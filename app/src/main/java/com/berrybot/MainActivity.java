@@ -164,6 +164,17 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
         // Hardware UX: Haptic tactile feedback & RGB Notification LED managers
         HapticHelper.getInstance(this);
         ledNotificationManager = LedNotificationManager.getInstance(this);
+        ledNotificationManager.setLedStateListener(new LedNotificationManager.LedStateListener() {
+            @Override
+            public void onLedStateChanged(final LedNotificationManager.LedState state, final String statusText) {
+                mainHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        updateLedStateUi(state, statusText);
+                    }
+                });
+            }
+        });
 
         initViews();
         setupKeyBar();
@@ -842,7 +853,7 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
             if (tvStatusDot != null) {
                 switch (state) {
                     case CONNECTED:
-                        tvStatusDot.setTextColor(getResources().getColor(R.color.claude_status_green));
+                        tvStatusDot.setTextColor(getResources().getColor(R.color.claude_status_blue));
                         break;
                     case CONNECTING:
                         tvStatusDot.setTextColor(getResources().getColor(R.color.claude_status_yellow));
@@ -865,6 +876,37 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
         } catch (Throwable t) {
             android.util.Log.e(TAG, "Error in onConnectionStateChanged", t);
         }
+    }
+
+    private void updateLedStateUi(LedNotificationManager.LedState state, String statusText) {
+        if (tvStatusDot == null || tvStatusText == null) return;
+        try {
+            switch (state) {
+                case CONNECTED:
+                    tvStatusDot.setTextColor(getResources().getColor(R.color.claude_status_blue));
+                    tvStatusText.setText("Connected • Idle");
+                    break;
+                case STREAMING:
+                    tvStatusDot.setTextColor(getResources().getColor(R.color.claude_status_yellow));
+                    tvStatusText.setText("Agent Thinking…");
+                    break;
+                case COMPLETE:
+                    tvStatusDot.setTextColor(getResources().getColor(R.color.claude_status_green));
+                    tvStatusText.setText("Response Ready!");
+                    break;
+                case CONNECTING:
+                    tvStatusDot.setTextColor(getResources().getColor(R.color.claude_status_yellow));
+                    tvStatusText.setText("Connecting…");
+                    break;
+                case ERROR:
+                    tvStatusDot.setTextColor(getResources().getColor(R.color.claude_status_red));
+                    tvStatusText.setText("Disconnected");
+                    break;
+                case NONE:
+                default:
+                    break;
+            }
+        } catch (Throwable ignored) {}
     }
 
     @Override

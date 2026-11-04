@@ -14,4 +14,5 @@
     <color name="claude_status_green">#4EBA6F</color>
     <color name="claude_status_yellow">#E5C07B</color>
     <color name="claude_status_red">#E06C75</color>
+    <color name="claude_status_blue">#3EA6FF</color>
 </resources>

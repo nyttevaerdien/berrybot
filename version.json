@@ -1,8 +1,8 @@
 {
-  "versionCode": 28,
-  "versionName": "1.0.28",
+  "versionCode": 29,
+  "versionName": "1.0.29",
   "apkUrl": "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@release-apk/berrybot.apk",
   "downloadUrl": "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@release-apk/berrybot.apk",
-  "fallbackUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.28/berrybot-1.0.28.apk",
-  "changelog": "BerryBot v1.0.28: Fix Backspace deleting to the right (strict backward deletion on physical keyboard and prevent accidental forward-del); switch OTA update manifest and APK download to jsDelivr CDN with legacy cipher support (fixes SSLHandshakeException on Android 4.3)."
+  "fallbackUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.29/berrybot-1.0.29.apk",
+  "changelog": "BerryBot v1.0.29: Constant multi-color status LED (Blue=Connected/Idle, Yellow=Agent Thinking, Green=Response Ready, Red=Error); persistent Green LED pulsing until phone is picked up; fix false vibration bug by debouncing bell & eliminating idle stream false alerts."
 }
