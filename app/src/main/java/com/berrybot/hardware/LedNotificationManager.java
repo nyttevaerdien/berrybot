@@ -110,6 +110,10 @@ public class LedNotificationManager {
         }
     }
 
+    public LedState getCurrentState() {
+        return currentState;
+    }
+
     public static LedNotificationManager getInstance(Context context) {
         if (instance == null) {
             synchronized (LedNotificationManager.class) {
@@ -357,12 +361,15 @@ public class LedNotificationManager {
                 .setContentTitle(title)
                 .setContentText(text)
                 .setContentIntent(pi)
+                .setPriority(Notification.PRIORITY_HIGH)
                 .setAutoCancel(false)
                 .setOngoing(false);
 
             if (sound) {
                 builder.setDefaults(Notification.DEFAULT_SOUND);
             }
+
+            builder.setLights(ledColor, onMs, offMs);
 
             Notification notification = builder.build();
             // Enable hardware LED flashing flag
@@ -371,6 +378,13 @@ public class LedNotificationManager {
             notification.flags &= ~Notification.FLAG_AUTO_CANCEL;
             // Never let default lights override custom RGB color
             notification.defaults &= ~Notification.DEFAULT_LIGHTS;
+
+            // BlackBerry 10 Hub requires a vibrate/sound signature to elevate notification to hardware LED
+            if (sound || ledColor == Color.GREEN) {
+                notification.vibrate = new long[]{0, 200, 150, 200};
+            } else {
+                notification.vibrate = new long[]{0, 1}; // Micro-tick (1ms) to engage BB10 Hub alert driver without user vibration
+            }
 
             notification.ledARGB = ledColor;
             notification.ledOnMS = onMs;

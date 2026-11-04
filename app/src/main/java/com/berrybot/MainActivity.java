@@ -198,6 +198,9 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
     private void initViews() {
         tvStatusDot = (TextView) findViewById(R.id.tvStatusDot);
         tvStatusText = (TextView) findViewById(R.id.tvStatusText);
+        if (ledNotificationManager != null) {
+            updateLedStateUi(ledNotificationManager.getCurrentState(), "BerryBot");
+        }
         terminalView = (TerminalView) findViewById(R.id.terminalView);
 
         terminalView.setBridge(terminalBridge);

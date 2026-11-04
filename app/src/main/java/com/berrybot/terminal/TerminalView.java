@@ -649,6 +649,19 @@ public class TerminalView extends View {
                 return true;
             }
 
+            if (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER || keyCode == 66) {
+                if (bridge != null) {
+                    bridge.sendString("\r");
+                }
+                triggerKeystrokeHaptic();
+                if (promptSubmitListener != null) {
+                    promptSubmitListener.onPromptSubmitted();
+                }
+                consumeModifiersAfterKey();
+                postInvalidateImmediate();
+                return true;
+            }
+
             if (handleAltOrCtrlChord(keyCode, event, isAlt, isCtrl)) {
                 return true;
             }
