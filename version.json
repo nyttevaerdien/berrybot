@@ -1,8 +1,8 @@
 {
-  "versionCode": 31,
-  "versionName": "1.0.31",
+  "versionCode": 32,
+  "versionName": "1.0.32",
   "apkUrl": "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@release-apk/berrybot.apk",
   "downloadUrl": "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@release-apk/berrybot.apk",
-  "fallbackUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.31/berrybot-1.0.31.apk",
-  "changelog": "BerryBot v1.0.31: Extinguish idle red LED by clearing notification during Connected/Idle; reserve physical alert LED and buzz exclusively for response completion until device is picked up; dismiss response alert on user interaction; on-screen dot reflects Blue/Yellow/Green/Red states."
+  "fallbackUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.32/berrybot-1.0.32.apk",
+  "changelog": "BerryBot v1.0.32: Point OTA manifest to release-apk & latest endpoints to bypass master branch caching; extinguish idle red LED, reserve physical blink & buzz exclusively for response completion until device is viewed; on-screen dot reflects Blue/Yellow/Green/Red states."
 }

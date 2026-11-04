@@ -41,13 +41,14 @@ public class UpdateManager {
 
     // Default release endpoint via jsDelivr CDN (mirrors GitHub in real-time and supports Android 4.3 cipher suites & TLS 1.2)
     public static final String DEFAULT_UPDATE_URL = 
-            "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@master/version.json";
+            "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@release-apk/version.json";
 
     public static final String[] FALLBACK_UPDATE_URLS = new String[] {
-            "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@master/version.json",
-            "https://fastly.jsdelivr.net/gh/nyttevaerdien/berrybot@master/version.json",
-            "https://gcore.jsdelivr.net/gh/nyttevaerdien/berrybot@master/version.json",
-            "https://raw.githubusercontent.com/nyttevaerdien/berrybot/master/version.json"
+            "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@release-apk/version.json",
+            "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@latest/version.json",
+            "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@main/version.json",
+            "https://fastly.jsdelivr.net/gh/nyttevaerdien/berrybot@release-apk/version.json",
+            "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@master/version.json"
     };
 
     public static final javax.net.ssl.HostnameVerifier HOSTNAME_VERIFIER = new javax.net.ssl.HostnameVerifier() {
@@ -103,8 +104,10 @@ public class UpdateManager {
         if (context == null) return DEFAULT_UPDATE_URL;
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         String url = prefs.getString(PREF_UPDATE_URL, DEFAULT_UPDATE_URL);
-        // Automatically migrate legacy raw.githubusercontent.com which lacks Android 4.3 cipher suites
-        if (url != null && (url.contains("raw.githubusercontent.com/nyttevaerdien/berrybot") || url.contains("github.com/nyttevaerdien/berrybot/raw"))) {
+        // Automatically migrate legacy endpoints which lack ciphers or suffer from branch cache lag
+        if (url != null && (url.contains("raw.githubusercontent.com/nyttevaerdien/berrybot") 
+                || url.contains("github.com/nyttevaerdien/berrybot/raw")
+                || url.contains("@master/version.json"))) {
             url = DEFAULT_UPDATE_URL;
             prefs.edit().putString(PREF_UPDATE_URL, url).commit();
         }
