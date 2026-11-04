@@ -1,7 +1,7 @@
 {
-  "versionCode": 25,
-  "versionName": "1.0.25",
-  "apkUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.25/berrybot-1.0.25.apk",
-  "downloadUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.25/berrybot-1.0.25.apk",
-  "changelog": "BerryBot v1.0.25: Fix Connection Settings menu opening & stop reconnection loop; add Disconnect / Stop option; hardware Menu key support; fix OTA SSL trust store fallback for Android 4.3; optical trackball cursor navigation."
+  "versionCode": 26,
+  "versionName": "1.0.26",
+  "apkUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.26/berrybot-1.0.26.apk",
+  "downloadUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.26/berrybot-1.0.26.apk",
+  "changelog": "BerryBot v1.0.26: Persist & prefill passphrase across dialog opens; add 'Apply & Connect' button; auto-save & connect on Back/Close; auto-reload active key on connect."
 }

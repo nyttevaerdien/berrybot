@@ -191,6 +191,7 @@ public class KeyStorage {
         try {
             Ed25519KeyPairGenerator gen = new Ed25519KeyPairGenerator();
             KeyPair kp = gen.generateKeyPair();
+            prefs.edit().remove(KEY_PASSPHRASE).commit();
             saveKeyPair(kp, nickname, null);
             currentKeyPair = kp;
             return true;
@@ -206,13 +207,14 @@ public class KeyStorage {
      */
     public synchronized boolean generateDeterministicKeyFromPhrase(String phrase, String nickname) {
         if (phrase == null || phrase.trim().isEmpty()) return false;
-        byte[] seed = MnemonicKeyDerivation.deriveSeedFromPassphrase(phrase, null);
+        String normalized = phrase.trim().replaceAll("\\s+", " ");
+        byte[] seed = MnemonicKeyDerivation.deriveSeedFromPassphrase(normalized, null);
         if (seed == null) return false;
         try {
             KeyPair kp = createEd25519KeyPairFromSeed(seed);
             if (kp != null && kp.getPrivate() != null) {
                 prefs.edit()
-                        .remove(KEY_PASSPHRASE)
+                        .putString(KEY_PASSPHRASE, normalized)
                         .remove(KEY_RAW_PEM)
                         .commit();
                 saveKeyPair(kp, nickname != null ? nickname : "berrybot@classic", null);
@@ -226,7 +228,7 @@ public class KeyStorage {
     }
 
     public synchronized String getSavedPassphrase() {
-        return null;
+        return prefs.getString(KEY_PASSPHRASE, null);
     }
 
     public synchronized boolean importPrivateKey(String keyData, String password, String nickname) {
@@ -324,6 +326,20 @@ public class KeyStorage {
                     .putInt(PREF_KEY_STORAGE_VERSION, CURRENT_KEY_STORAGE_VERSION)
                     .commit();
             currentKeyPair = null;
+        }
+
+        // Try restoring deterministic key from saved passphrase
+        String savedPhrase = prefs.getString(KEY_PASSPHRASE, null);
+        if (savedPhrase != null && !savedPhrase.trim().isEmpty()) {
+            byte[] seed = MnemonicKeyDerivation.deriveSeedFromPassphrase(savedPhrase.trim(), null);
+            if (seed != null) {
+                try {
+                    currentKeyPair = createEd25519KeyPairFromSeed(seed);
+                    if (currentKeyPair != null) return;
+                } finally {
+                    Arrays.fill(seed, (byte) 0);
+                }
+            }
         }
 
         // Try loading from saved raw PEM

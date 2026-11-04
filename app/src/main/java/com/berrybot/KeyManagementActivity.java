@@ -185,11 +185,16 @@ public class KeyManagementActivity extends Activity {
 
         btnClose.setOnClickListener(v -> {
             saveDraftServerParams();
-            if (isFirstRun) {
-                setResult(RESULT_CANCELED);
-            }
+            setResult(RESULT_OK);
             finish();
         });
+    }
+
+    @Override
+    public void onBackPressed() {
+        saveDraftServerParams();
+        setResult(RESULT_OK);
+        super.onBackPressed();
     }
 
     private void saveDraftServerParams() {
@@ -205,11 +210,13 @@ public class KeyManagementActivity extends Activity {
             }
         } catch (NumberFormatException ignored) {}
 
+        boolean hasHostAndUser = !h.isEmpty() && !u.isEmpty();
         getSharedPreferences("berrybot_prefs", MODE_PRIVATE)
             .edit()
             .putString("host", h)
             .putInt("port", p)
             .putString("user", u)
+            .putBoolean("key_setup_settled", hasHostAndUser)
             .commit();
     }
 
@@ -245,6 +252,12 @@ public class KeyManagementActivity extends Activity {
         input.setMinLines(3);
         input.setGravity(android.view.Gravity.TOP | android.view.Gravity.LEFT);
 
+        String savedPhrase = keyStorage.getSavedPassphrase();
+        if (savedPhrase != null && !savedPhrase.trim().isEmpty()) {
+            input.setText(savedPhrase.trim());
+            input.setSelection(savedPhrase.trim().length());
+        }
+
         Button btnGen12 = new Button(this);
         btnGen12.setText("Generate 12 Random Words");
         btnGen12.setOnClickListener(v -> {
@@ -264,7 +277,6 @@ public class KeyManagementActivity extends Activity {
             .setView(layout)
             .setPositiveButton("Apply Key", (dialog, which) -> {
                 String phrase = input.getText().toString().trim();
-                input.setText("");
                 if (phrase.isEmpty()) {
                     Toast.makeText(this, "Phrase cannot be empty", Toast.LENGTH_SHORT).show();
                     return;
@@ -274,6 +286,22 @@ public class KeyManagementActivity extends Activity {
                     refreshPublicKey();
                     copyPublicKeyToClipboard();
                     Toast.makeText(this, "Permanent key applied and copied to clipboard!", Toast.LENGTH_LONG).show();
+                } else {
+                    Toast.makeText(this, "Failed to derive key from phrase", Toast.LENGTH_SHORT).show();
+                }
+            })
+            .setNeutralButton("Apply & Connect", (dialog, which) -> {
+                String phrase = input.getText().toString().trim();
+                if (phrase.isEmpty()) {
+                    Toast.makeText(this, "Phrase cannot be empty", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                boolean success = keyStorage.generateDeterministicKeyFromPhrase(phrase, "berrybot@classic");
+                if (success) {
+                    refreshPublicKey();
+                    saveDraftServerParams();
+                    setResult(RESULT_OK);
+                    finish();
                 } else {
                     Toast.makeText(this, "Failed to derive key from phrase", Toast.LENGTH_SHORT).show();
                 }

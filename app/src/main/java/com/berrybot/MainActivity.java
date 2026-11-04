@@ -341,11 +341,18 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
                     android.content.SharedPreferences prefs = getSharedPreferences("berrybot_prefs", MODE_PRIVATE);
                     String h = prefs.getString("host", "").trim();
                     String u = prefs.getString("user", "").trim();
+                    int p = prefs.getInt("port", 2222);
                     if (!prefs.getBoolean("key_setup_settled", false) || h.isEmpty() || u.isEmpty()) {
                         openConnectionSettingsActivity(true);
                     } else {
-                        Toast.makeText(this, "Connecting...", Toast.LENGTH_SHORT).show();
-                        connectionManager.connect();
+                        if (keyStorage != null) {
+                            keyStorage.reload();
+                        }
+                        if (connectionManager != null) {
+                            connectionManager.updateConnectionParams(h, p, u);
+                            Toast.makeText(this, "Connecting...", Toast.LENGTH_SHORT).show();
+                            connectionManager.connect();
+                        }
                         if (terminalView != null) terminalView.requestFocus();
                     }
                 } else if (chosen.startsWith("🔄 Check for Updates")) {
@@ -728,20 +735,17 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
             String h = prefs.getString("host", "").trim();
             int p = prefs.getInt("port", 2222);
             String u = prefs.getString("user", "").trim();
-            boolean keySettled = prefs.getBoolean("key_setup_settled", false);
 
-            if (resultCode == RESULT_OK && !h.isEmpty() && !u.isEmpty()) {
-                if (keyStorage != null) {
-                    keyStorage.reload();
-                }
+            if (keyStorage != null) {
+                keyStorage.reload();
+            }
+            if (!h.isEmpty() && !u.isEmpty()) {
                 if (connectionManager != null) {
                     connectionManager.updateConnectionParams(h, p, u);
                     connectionManager.connect();
                 }
             } else {
-                if (!keySettled || h.isEmpty() || u.isEmpty()) {
-                    onConnectionStateChanged(SSHConnectionManager.ConnectionState.DISCONNECTED, "Setup required: Tap here to configure server & key.");
-                }
+                onConnectionStateChanged(SSHConnectionManager.ConnectionState.DISCONNECTED, "Setup required: Tap here to configure server & key.");
             }
         }
     }
