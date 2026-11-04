@@ -394,7 +394,7 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
                 String newHost = etHost.getText().toString().trim();
                 String portStr = etPort.getText().toString().trim();
                 String newUser = etUser.getText().toString().trim();
-                int newPort = 22;
+                int newPort = 2222;
                 try {
                     newPort = Integer.parseInt(portStr);
                 } catch (NumberFormatException ignored) {}
@@ -717,7 +717,7 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
         if (requestCode == REQUEST_CODE_KEY_SETUP) {
             android.content.SharedPreferences prefs = getSharedPreferences("berrybot_prefs", MODE_PRIVATE);
             String h = prefs.getString("host", "").trim();
-            int p = prefs.getInt("port", 22);
+            int p = prefs.getInt("port", 2222);
             String u = prefs.getString("user", "").trim();
             boolean keySettled = prefs.getBoolean("key_setup_settled", false);
 

@@ -35,8 +35,8 @@ public class SSHConnectionManager implements ConnectionMonitor {
     private static final String TAG = "BerryBot.SSH";
 
     public static final String DEFAULT_HOST = "";
-    public static final int DEFAULT_PORT = 22;
-    public static final String DEFAULT_USER = "";
+    public static final int DEFAULT_PORT = 2222;
+    public static final String DEFAULT_USER = "kirill";
 
     // Power & Radio Optimization Constants
     public static final long WAKELOCK_CONNECT_TIMEOUT_MS = 15000;   // 15s to establish connection & authenticate

@@ -1,7 +1,7 @@
 {
-  "versionCode": 20,
-  "versionName": "1.0.20",
-  "apkUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.20/berrybot-1.0.20.apk",
-  "downloadUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.20/berrybot-1.0.20.apk",
-  "changelog": "BerryBot v1.0.20: Integrated Server Host/IP, Port & Username into first-start onboarding setup screen; prevents connection attempts on empty host."
+  "versionCode": 21,
+  "versionName": "1.0.21",
+  "apkUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.21/berrybot-1.0.21.apk",
+  "downloadUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.21/berrybot-1.0.21.apk",
+  "changelog": "BerryBot v1.0.21: Configured default container port to 2222 and default user kirill; pre-filled in onboarding."
 }

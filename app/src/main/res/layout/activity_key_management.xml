@@ -68,7 +68,7 @@
                 android:layout_height="38dp"
                 android:layout_weight="1"
                 android:hint="Port"
-                android:text="22"
+                android:text="2222"
                 android:textColorHint="@color/claude_cream_dim"
                 android:textColor="@color/claude_cream"
                 android:textSize="12sp"

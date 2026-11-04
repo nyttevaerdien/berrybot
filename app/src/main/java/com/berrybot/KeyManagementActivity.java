@@ -73,12 +73,12 @@ public class KeyManagementActivity extends Activity {
 
         android.content.SharedPreferences prefs = getSharedPreferences("berrybot_prefs", MODE_PRIVATE);
         String savedHost = prefs.getString("host", "");
-        int savedPort = prefs.getInt("port", 22);
-        String savedUser = prefs.getString("user", "");
+        int savedPort = prefs.getInt("port", 2222);
+        String savedUser = prefs.getString("user", "kirill");
 
         if (etServerHost != null && !savedHost.isEmpty()) etServerHost.setText(savedHost);
-        if (etServerPort != null) etServerPort.setText(String.valueOf(savedPort > 0 ? savedPort : 22));
-        if (etServerUser != null && !savedUser.isEmpty()) etServerUser.setText(savedUser);
+        if (etServerPort != null) etServerPort.setText(String.valueOf(savedPort > 0 ? savedPort : 2222));
+        if (etServerUser != null) etServerUser.setText(!savedUser.isEmpty() ? savedUser : "kirill");
 
         android.widget.TextView tvSetupNotice = (android.widget.TextView) findViewById(R.id.tvSetupNotice);
         boolean isFirstRun = getIntent().getBooleanExtra("is_first_run", false);
@@ -100,7 +100,7 @@ public class KeyManagementActivity extends Activity {
             btnConnectNow.setOnClickListener(v -> {
                 String hostInput = etServerHost != null ? etServerHost.getText().toString().trim() : "";
                 String userInput = etServerUser != null ? etServerUser.getText().toString().trim() : "";
-                String portStr = etServerPort != null ? etServerPort.getText().toString().trim() : "22";
+                String portStr = etServerPort != null ? etServerPort.getText().toString().trim() : "2222";
 
                 if (hostInput.isEmpty()) {
                     Toast.makeText(this, "Please enter your Server Host / IP", Toast.LENGTH_SHORT).show();
@@ -113,7 +113,7 @@ public class KeyManagementActivity extends Activity {
                     return;
                 }
 
-                int portInput = 22;
+                int portInput = 2222;
                 try {
                     portInput = Integer.parseInt(portStr);
                 } catch (NumberFormatException ignored) {}
