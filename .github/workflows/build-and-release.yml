@@ -70,8 +70,8 @@ jobs:
           {
             "versionCode": $VERSION_CODE,
             "versionName": "$VERSION_NAME",
-            "apkUrl": "https://cdn.jsdelivr.net/gh/${{ github.repository }}@release-apk/berrybot.apk",
-            "downloadUrl": "https://cdn.jsdelivr.net/gh/${{ github.repository }}@release-apk/berrybot.apk",
+            "apkUrl": "https://cdn.jsdelivr.net/gh/${{ github.repository }}@release-apk/berrybot-$VERSION_NAME.apk",
+            "downloadUrl": "https://cdn.jsdelivr.net/gh/${{ github.repository }}@release-apk/berrybot-$VERSION_NAME.apk",
             "fallbackUrl": "https://github.com/${{ github.repository }}/releases/download/v$VERSION_NAME/berrybot-$VERSION_NAME.apk",
             "changelog": "Automated CI/CD build for BerryBot v$VERSION_NAME (${GITHUB_SHA:0:7})"
           }

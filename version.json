@@ -1,8 +1,8 @@
 {
   "versionCode": 33,
   "versionName": "1.0.33",
-  "apkUrl": "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@release-apk/berrybot.apk",
-  "downloadUrl": "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@release-apk/berrybot.apk",
+  "apkUrl": "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@release-apk/berrybot-1.0.33.apk",
+  "downloadUrl": "https://cdn.jsdelivr.net/gh/nyttevaerdien/berrybot@release-apk/berrybot-1.0.33.apk",
   "fallbackUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.33/berrybot-1.0.33.apk",
   "changelog": "BerryBot v1.0.33: Fix LED alert suppression on lock screen by preserving notification when screen wakes; restore direct hardware completion vibration; add cache-busting to OTA manifest queries."
 }
