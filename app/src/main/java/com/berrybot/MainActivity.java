@@ -211,18 +211,21 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
                 showUnifiedMenu();
             }
         };
+        View.OnLongClickListener openSettingsLongClick = v -> {
+            openConnectionSettingsActivity(false);
+            return true;
+        };
         if (btnConnection != null) {
             btnConnection.setOnClickListener(menuClickListener);
-            btnConnection.setOnLongClickListener(v -> {
-                openConnectionSettingsActivity(false);
-                return true;
-            });
+            btnConnection.setOnLongClickListener(openSettingsLongClick);
         }
         if (tvStatusText != null) {
             tvStatusText.setOnClickListener(menuClickListener);
+            tvStatusText.setOnLongClickListener(openSettingsLongClick);
         }
         if (tvStatusDot != null) {
             tvStatusDot.setOnClickListener(menuClickListener);
+            tvStatusDot.setOnLongClickListener(openSettingsLongClick);
         }
 
         btnSlash = (Button) findViewById(R.id.btnSlash);
@@ -289,6 +292,9 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
     }
 
     private void openConnectionSettingsActivity(boolean isFirstRun) {
+        if (connectionManager != null && !connectionManager.isConnected()) {
+            connectionManager.disconnect();
+        }
         Intent intent = new Intent(this, KeyManagementActivity.class);
         intent.putExtra("is_first_run", isFirstRun);
         startActivityForResult(intent, REQUEST_CODE_KEY_SETUP);
@@ -296,21 +302,26 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
 
     private void showUnifiedMenu() {
         if (!isActivityAlive()) return;
-        boolean isConnected = connectionManager.isConnected();
+        boolean isConnected = connectionManager != null && connectionManager.isConnected();
+        boolean isReconnecting = connectionManager != null && connectionManager.isReconnecting();
         boolean hapticOn = HapticHelper.getInstance(this).isHapticEnabled();
 
         java.util.List<String> optionsList = new java.util.ArrayList<>();
-        optionsList.add(isConnected ? "⚡ Reconnect Session" : "⚡ Connect");
+        if (isConnected) {
+            optionsList.add("⚡ Reconnect Session");
+        } else {
+            optionsList.add("⚡ Connect");
+        }
         optionsList.add("⚙️ Connection Settings");
+        if (isConnected || isReconnecting) {
+            optionsList.add("❌ Disconnect / Stop");
+        }
         optionsList.add("🔄 Check for Updates (OTA)");
         optionsList.add("🧹 Clear Prompt Line (Ctrl+U / Alt+DEL)");
         optionsList.add("🛑 Cancel / Break (Ctrl+C / Alt+C)");
         optionsList.add("📳 Haptic Feedback: " + (hapticOn ? "ON" : "OFF"));
         optionsList.add("⚡ Antigravity Slash Commands (/)...");
         optionsList.add("❓ FAQ & Shortcuts Guide");
-        if (isConnected) {
-            optionsList.add("❌ Disconnect");
-        }
 
         final String[] options = optionsList.toArray(new String[0]);
 
@@ -318,7 +329,15 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
             .setTitle("BerryBot Menu • " + (lastStatusMessage != null ? lastStatusMessage : "Menu"))
             .setItems(options, (dialog, which) -> {
                 String chosen = options[which];
-                if (chosen.contains("Connect") || chosen.contains("Reconnect")) {
+                if (chosen.startsWith("⚙️ Connection Settings")) {
+                    openConnectionSettingsActivity(false);
+                } else if (chosen.startsWith("❌ Disconnect")) {
+                    if (connectionManager != null) {
+                        connectionManager.disconnect();
+                        Toast.makeText(this, "Disconnected / Reconnect stopped", Toast.LENGTH_SHORT).show();
+                    }
+                    if (terminalView != null) terminalView.requestFocus();
+                } else if (chosen.startsWith("⚡ Connect") || chosen.startsWith("⚡ Reconnect")) {
                     android.content.SharedPreferences prefs = getSharedPreferences("berrybot_prefs", MODE_PRIVATE);
                     String h = prefs.getString("host", "").trim();
                     String u = prefs.getString("user", "").trim();
@@ -329,40 +348,32 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
                         connectionManager.connect();
                         if (terminalView != null) terminalView.requestFocus();
                     }
-                } else if (chosen.contains("Connection Settings")) {
-                    openConnectionSettingsActivity(false);
-                } else if (chosen.contains("Check for Updates")) {
+                } else if (chosen.startsWith("🔄 Check for Updates")) {
                     UpdateManager.getInstance().checkForUpdates(this, true);
-                } else if (chosen.contains("Clear Prompt Line")) {
+                } else if (chosen.startsWith("🧹 Clear Prompt Line")) {
                     if (terminalBridge != null) {
                         terminalBridge.sendString("\025");
                     }
                     HapticHelper.tick(this);
                     Toast.makeText(this, "Cleared line", Toast.LENGTH_SHORT).show();
                     if (terminalView != null) terminalView.requestFocus();
-                } else if (chosen.contains("Cancel / Break")) {
+                } else if (chosen.startsWith("🛑 Cancel / Break")) {
                     if (terminalBridge != null) {
                         terminalBridge.sendString("\003");
                     }
                     HapticHelper.tick(this);
                     Toast.makeText(this, "Sent Cancel (Ctrl+C)", Toast.LENGTH_SHORT).show();
                     if (terminalView != null) terminalView.requestFocus();
-                } else if (chosen.contains("Haptic Feedback")) {
+                } else if (chosen.startsWith("📳 Haptic Feedback")) {
                     boolean nowEnabled = !HapticHelper.getInstance(this).isHapticEnabled();
                     HapticHelper.getInstance(this).setHapticEnabled(nowEnabled);
                     Toast.makeText(this, "Haptic Feedback: " + (nowEnabled ? "ON" : "OFF"), Toast.LENGTH_SHORT).show();
                     if (nowEnabled) HapticHelper.tick(this);
                     if (terminalView != null) terminalView.requestFocus();
-                } else if (chosen.contains("Slash Commands")) {
+                } else if (chosen.startsWith("⚡ Antigravity Slash")) {
                     showSlashCommandPicker(null);
-                } else if (chosen.contains("FAQ & Shortcuts")) {
+                } else if (chosen.startsWith("❓ FAQ & Shortcuts")) {
                     showFaqDialog();
-                } else if (chosen.contains("Disconnect")) {
-                    if (connectionManager.isConnected()) {
-                        connectionManager.disconnect();
-                        Toast.makeText(this, "Disconnected", Toast.LENGTH_SHORT).show();
-                    }
-                    if (terminalView != null) terminalView.requestFocus();
                 }
             })
             .setNegativeButton("Close", null)
@@ -733,6 +744,15 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
                 }
             }
         }
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, android.view.KeyEvent event) {
+        if (keyCode == android.view.KeyEvent.KEYCODE_MENU) {
+            showUnifiedMenu();
+            return true;
+        }
+        return super.onKeyUp(keyCode, event);
     }
 
     @Override

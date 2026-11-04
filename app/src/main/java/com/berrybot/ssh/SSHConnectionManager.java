@@ -509,6 +509,18 @@ public class SSHConnectionManager implements ConnectionMonitor {
             return;
         }
 
+        if (context != null) {
+            try {
+                SharedPreferences prefs = context.getSharedPreferences("berrybot_prefs", Context.MODE_PRIVATE);
+                String h = prefs.getString("host", this.host);
+                int p = prefs.getInt("port", this.port);
+                String u = prefs.getString("user", this.user);
+                if (h != null && !h.trim().isEmpty()) this.host = h.trim();
+                if (p > 0) this.port = p;
+                if (u != null && !u.trim().isEmpty()) this.user = u.trim();
+            } catch (Throwable ignored) {}
+        }
+
         if (host == null || host.trim().isEmpty() || user == null || user.trim().isEmpty()) {
             Log.w(TAG, "Cannot connect: host or username is not configured");
             notifyState(ConnectionState.DISCONNECTED, "Setup required: Server Host & User empty");
@@ -566,6 +578,10 @@ public class SSHConnectionManager implements ConnectionMonitor {
 
     public boolean isConnected() {
         return connection != null && session != null && isRunning;
+    }
+
+    public boolean isReconnecting() {
+        return isConnecting.get() || (hasStartedOnce && !userRequestedDisconnect && !isConnected());
     }
 
     public void sendData(byte[] data) {
@@ -678,6 +694,7 @@ public class SSHConnectionManager implements ConnectionMonitor {
                 Log.e(TAG, "Authentication rejected by server for user " + user + " (offered " + fp + ")");
                 notifyState(ConnectionState.AUTH_FAILED, "Auth Failed: Key " + fp + " not authorized on server");
                 isRunning = false;
+                userRequestedDisconnect = true;
                 closeSessionAndConnection();
                 releaseWakeLock();
                 return;

@@ -280,4 +280,30 @@ public class KeycodeAndShortcutMappingTest {
         view.handleKeyEvent(KeyEvent.KEYCODE_ESCAPE, false, false, false, 0);
         Assert.assertTrue("Escape should send ESC sequence", getSentText().contains("\033"));
     }
+
+    @Test
+    public void testMenuOptionDispatchesUnambiguously() {
+        String optSettings = "⚙️ Connection Settings";
+        String optDisconnect = "❌ Disconnect / Stop";
+        String optConnect = "⚡ Connect";
+        String optReconnect = "⚡ Reconnect Session";
+
+        // Connection Settings must NOT match connect/reconnect
+        Assert.assertFalse(optSettings.startsWith("⚡ Connect"));
+        Assert.assertFalse(optSettings.startsWith("⚡ Reconnect"));
+        Assert.assertTrue(optSettings.startsWith("⚙️ Connection Settings"));
+
+        // Disconnect must NOT match connect/reconnect
+        Assert.assertFalse(optDisconnect.startsWith("⚡ Connect"));
+        Assert.assertFalse(optDisconnect.startsWith("⚡ Reconnect"));
+        Assert.assertTrue(optDisconnect.startsWith("❌ Disconnect"));
+
+        // Connect matches connect
+        Assert.assertTrue(optConnect.startsWith("⚡ Connect"));
+        Assert.assertFalse(optConnect.startsWith("⚙️ Connection Settings"));
+
+        // Reconnect matches reconnect
+        Assert.assertTrue(optReconnect.startsWith("⚡ Reconnect"));
+        Assert.assertFalse(optReconnect.startsWith("⚙️ Connection Settings"));
+    }
 }

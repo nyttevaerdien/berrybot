@@ -1,7 +1,7 @@
 {
-  "versionCode": 24,
-  "versionName": "1.0.24",
-  "apkUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.24/berrybot-1.0.24.apk",
-  "downloadUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.24/berrybot-1.0.24.apk",
-  "changelog": "BerryBot v1.0.24: Fix OTA SSL handshake for Android 4.3; fix TAB key with Alt+Space/Alt+T chords & non-focusing keybar; optical trackball scrolls text & latest messages (screen/PG keys scroll output); Agent push notifications & multicolor status LED; single unified connection configs page."
+  "versionCode": 25,
+  "versionName": "1.0.25",
+  "apkUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.25/berrybot-1.0.25.apk",
+  "downloadUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.25/berrybot-1.0.25.apk",
+  "changelog": "BerryBot v1.0.25: Fix Connection Settings menu opening & stop reconnection loop; add Disconnect / Stop option; hardware Menu key support; fix OTA SSL trust store fallback for Android 4.3; optical trackball cursor navigation."
 }
