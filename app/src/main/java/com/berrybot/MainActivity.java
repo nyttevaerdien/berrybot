@@ -129,7 +129,7 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
                 .show();
         }
 
-        keyStorage = new KeyStorage(this);
+        keyStorage = KeyStorage.getInstance(this);
         connectionManager = new SSHConnectionManager(this, keyStorage);
         connectionManager.setListener(this);
 
@@ -353,10 +353,12 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
     }
 
     private void showStatusDetailDialog() {
+        String fp = (keyStorage != null) ? keyStorage.getFingerprint() : "Unknown";
         new AlertDialog.Builder(this)
             .setTitle("Connection Status")
             .setMessage((lastStatusMessage != null ? lastStatusMessage : "No status") + 
-                        "\n\nServer: " + connectionManager.getUser() + "@" + connectionManager.getHost() + ":" + connectionManager.getPort())
+                        "\n\nServer: " + connectionManager.getUser() + "@" + connectionManager.getHost() + ":" + connectionManager.getPort() +
+                        "\n\nKey: " + fp)
             .setPositiveButton("Edit Server", (dialog, which) -> showServerConfigDialog())
             .setNeutralButton("Reconnect", (dialog, which) -> {
                 connectionManager.connect();
@@ -722,6 +724,9 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
             boolean keySettled = prefs.getBoolean("key_setup_settled", false);
 
             if (resultCode == RESULT_OK && !h.isEmpty() && !u.isEmpty()) {
+                if (keyStorage != null) {
+                    keyStorage.reload();
+                }
                 if (connectionManager != null) {
                     connectionManager.updateConnectionParams(h, p, u);
                     connectionManager.connect();

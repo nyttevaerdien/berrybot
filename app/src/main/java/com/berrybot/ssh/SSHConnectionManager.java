@@ -609,12 +609,13 @@ public class SSHConnectionManager implements ConnectionMonitor {
                 return;
             }
 
-            Log.i(TAG, "Authenticating user: " + user + " with " + kp.getPublic().getAlgorithm() + " key");
+            String fp = (keyStorage != null) ? keyStorage.getFingerprint() : "Unknown";
+            Log.i(TAG, "Authenticating user: " + user + " with " + kp.getPublic().getAlgorithm() + " key (" + fp + ")");
             boolean authed = connection.authenticateWithPublicKey(user, kp);
 
             if (!authed) {
-                Log.e(TAG, "Authentication rejected by server for user " + user);
-                notifyState(ConnectionState.AUTH_FAILED, "Auth Failed: Public key not authorized on server");
+                Log.e(TAG, "Authentication rejected by server for user " + user + " (offered " + fp + ")");
+                notifyState(ConnectionState.AUTH_FAILED, "Auth Failed: Key " + fp + " not authorized on server");
                 isRunning = false;
                 closeSessionAndConnection();
                 releaseWakeLock();

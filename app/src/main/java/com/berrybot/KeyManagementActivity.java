@@ -14,21 +14,26 @@ public class KeyManagementActivity extends Activity {
     private KeyStorage keyStorage;
     private EditText etPublicKey;
     private EditText etPrivateKeyInput;
+    private android.widget.TextView tvFingerprint;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_key_management);
 
-        keyStorage = new KeyStorage(this);
+        keyStorage = KeyStorage.getInstance(this);
 
         android.graphics.Typeface monoFont = com.berrybot.util.FontHelper.getMonospaceTypeface(this);
 
         etPublicKey = (EditText) findViewById(R.id.etPublicKey);
         etPrivateKeyInput = (EditText) findViewById(R.id.etPrivateKeyInput);
+        tvFingerprint = (android.widget.TextView) findViewById(R.id.tvFingerprint);
 
         etPublicKey.setTypeface(monoFont);
         etPrivateKeyInput.setTypeface(monoFont);
+        if (tvFingerprint != null) {
+            tvFingerprint.setTypeface(monoFont);
+        }
 
         final float[] keyFontSize = new float[] { 13.0f };
         etPublicKey.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, keyFontSize[0]);
@@ -179,6 +184,9 @@ public class KeyManagementActivity extends Activity {
     private void refreshPublicKey() {
         String pub = keyStorage.getOpenSSHPublicKey();
         etPublicKey.setText(pub);
+        if (tvFingerprint != null) {
+            tvFingerprint.setText("Active Key Fingerprint:\n" + keyStorage.getFingerprint());
+        }
     }
 
     private void copyPublicKeyToClipboard() {

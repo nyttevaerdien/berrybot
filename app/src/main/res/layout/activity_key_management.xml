@@ -164,6 +164,16 @@
             android:text="Font: 0 (slashed zero) • O (capital O) • 1 (one) • l (ell) • I (eye)"
             android:textColor="@color/claude_cream_dim"
             android:textSize="9sp"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvFingerprint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Fingerprint: SHA256:..."
+            android:textColor="@color/claude_coral"
+            android:textSize="10sp"
+            android:typeface="monospace"
             android:layout_marginBottom="8dp" />
 
         <LinearLayout

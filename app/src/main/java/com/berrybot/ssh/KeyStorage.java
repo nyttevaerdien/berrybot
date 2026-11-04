@@ -33,6 +33,15 @@ public class KeyStorage {
     private static final String PREF_KEY_STORAGE_VERSION = "key_storage_version";
     private static final int CURRENT_KEY_STORAGE_VERSION = 3;
 
+    private static KeyStorage sInstance;
+
+    public static synchronized KeyStorage getInstance(Context context) {
+        if (sInstance == null) {
+            sInstance = new KeyStorage(context != null ? context.getApplicationContext() : null);
+        }
+        return sInstance;
+    }
+
     private final SharedPreferences prefs;
     private KeyPair currentKeyPair;
     private String lastImportError = null;
@@ -103,6 +112,36 @@ public class KeyStorage {
         return currentKeyPair;
     }
 
+    public synchronized void reload() {
+        currentKeyPair = null;
+        loadOrGenerateKey();
+    }
+
+    public synchronized String getFingerprint() {
+        KeyPair kp = getKeyPair();
+        if (kp == null || kp.getPublic() == null) {
+            return "None";
+        }
+        try {
+            byte[] encoded;
+            if (kp.getPublic() instanceof Ed25519PublicKey) {
+                encoded = Ed25519Verify.get().encodePublicKey(kp.getPublic());
+            } else if (kp.getPublic() instanceof RSAPublicKey) {
+                encoded = com.trilead.ssh2.signature.RSASHA1Verify.get().encodePublicKey(kp.getPublic());
+            } else {
+                encoded = kp.getPublic().getEncoded();
+            }
+            if (encoded == null) return "Unknown";
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(encoded);
+            String b64 = Base64.encodeToString(digest, Base64.NO_WRAP | Base64.NO_PADDING).trim();
+            return "SHA256:" + b64;
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to compute fingerprint", e);
+            return "Error";
+        }
+    }
+
     public synchronized String getOpenSSHPublicKey() {
         KeyPair kp = getKeyPair();
         if (kp == null || kp.getPublic() == null) {
@@ -162,7 +201,10 @@ public class KeyStorage {
             KeyPair kp = createEd25519KeyPairFromSeed(seed);
             if (kp != null && kp.getPrivate() != null) {
                 String normalized = phrase.trim().replaceAll("\\s+", " ").toLowerCase();
-                prefs.edit().putString(KEY_PASSPHRASE, normalized).commit();
+                prefs.edit()
+                        .putString(KEY_PASSPHRASE, normalized)
+                        .remove(KEY_RAW_PEM)
+                        .commit();
                 saveKeyPair(kp, nickname != null ? nickname : "berrybot@classic", null);
                 currentKeyPair = kp;
                 return true;
@@ -331,7 +373,10 @@ public class KeyStorage {
         }
         if (rawPem != null) {
             editor.putString(KEY_RAW_PEM, rawPem);
+        } else {
+            editor.remove(KEY_RAW_PEM);
         }
-        editor.apply();
+        editor.commit();
+        this.currentKeyPair = kp;
     }
 }
