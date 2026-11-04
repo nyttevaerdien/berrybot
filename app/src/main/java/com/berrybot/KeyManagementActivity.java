@@ -14,6 +14,9 @@ public class KeyManagementActivity extends Activity {
     private KeyStorage keyStorage;
     private EditText etPublicKey;
     private EditText etPrivateKeyInput;
+    private EditText etServerHost;
+    private EditText etServerPort;
+    private EditText etServerUser;
     private android.widget.TextView tvFingerprint;
 
     @Override
@@ -72,18 +75,18 @@ public class KeyManagementActivity extends Activity {
         Button btnClose = (Button) findViewById(R.id.btnClose);
         Button btnConnectNow = (Button) findViewById(R.id.btnConnectNow);
 
-        EditText etServerHost = (EditText) findViewById(R.id.etServerHost);
-        EditText etServerPort = (EditText) findViewById(R.id.etServerPort);
-        EditText etServerUser = (EditText) findViewById(R.id.etServerUser);
+        etServerHost = (EditText) findViewById(R.id.etServerHost);
+        etServerPort = (EditText) findViewById(R.id.etServerPort);
+        etServerUser = (EditText) findViewById(R.id.etServerUser);
 
         android.content.SharedPreferences prefs = getSharedPreferences("berrybot_prefs", MODE_PRIVATE);
         String savedHost = prefs.getString("host", "");
         int savedPort = prefs.getInt("port", 2222);
-        String savedUser = prefs.getString("user", "kirill");
+        String savedUser = prefs.getString("user", "");
 
         if (etServerHost != null && !savedHost.isEmpty()) etServerHost.setText(savedHost);
         if (etServerPort != null) etServerPort.setText(String.valueOf(savedPort > 0 ? savedPort : 2222));
-        if (etServerUser != null) etServerUser.setText(!savedUser.isEmpty() ? savedUser : "kirill");
+        if (etServerUser != null && !savedUser.isEmpty()) etServerUser.setText(savedUser);
 
         android.widget.TextView tvSetupNotice = (android.widget.TextView) findViewById(R.id.tvSetupNotice);
         boolean isFirstRun = getIntent().getBooleanExtra("is_first_run", false);
@@ -174,11 +177,36 @@ public class KeyManagementActivity extends Activity {
         });
 
         btnClose.setOnClickListener(v -> {
+            saveDraftServerParams();
             if (isFirstRun) {
                 setResult(RESULT_CANCELED);
             }
             finish();
         });
+    }
+
+    private void saveDraftServerParams() {
+        if (etServerHost == null || etServerUser == null || etServerPort == null) return;
+        String h = etServerHost.getText().toString().trim();
+        String u = etServerUser.getText().toString().trim();
+        String pStr = etServerPort.getText().toString().trim();
+        int p = 2222;
+        try {
+            p = Integer.parseInt(pStr);
+        } catch (NumberFormatException ignored) {}
+
+        getSharedPreferences("berrybot_prefs", MODE_PRIVATE)
+            .edit()
+            .putString("host", h)
+            .putInt("port", p)
+            .putString("user", u)
+            .commit();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        saveDraftServerParams();
     }
 
     private void refreshPublicKey() {

@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">BerryBot</string>
     <string name="title_terminal">BerryBot Terminal</string>
-    <string name="title_key_management">SSH Keys</string>
+    <string name="title_key_management">Connection &amp; Keys</string>
     <string name="title_settings">Settings</string>
 
     <string name="status_connected">Connected</string>

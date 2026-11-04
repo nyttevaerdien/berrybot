@@ -150,9 +150,7 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
         String currentUser = prefs.getString("user", "").trim();
         if (!keySettled || currentHost.isEmpty() || currentUser.isEmpty()) {
             onConnectionStateChanged(SSHConnectionManager.ConnectionState.DISCONNECTED, "Setup: Configure server & SSH key before connecting");
-            android.content.Intent intent = new android.content.Intent(this, KeyManagementActivity.class);
-            intent.putExtra("is_first_run", true);
-            startActivityForResult(intent, REQUEST_CODE_KEY_SETUP);
+            openConnectionSettingsActivity(true);
         } else {
             connectionManager.connect();
         }
@@ -183,9 +181,7 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
             String u = p.getString("user", "").trim();
             boolean settled = p.getBoolean("key_setup_settled", false);
             if (!settled || h.isEmpty() || u.isEmpty()) {
-                Intent intent = new Intent(this, KeyManagementActivity.class);
-                intent.putExtra("is_first_run", true);
-                startActivityForResult(intent, REQUEST_CODE_KEY_SETUP);
+                openConnectionSettingsActivity(true);
             } else {
                 showUnifiedMenu();
             }
@@ -193,7 +189,7 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
         if (btnConnection != null) {
             btnConnection.setOnClickListener(menuClickListener);
             btnConnection.setOnLongClickListener(v -> {
-                showServerConfigDialog();
+                openConnectionSettingsActivity(false);
                 return true;
             });
         }
@@ -266,84 +262,81 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
             .show();
     }
 
+    private void openConnectionSettingsActivity(boolean isFirstRun) {
+        Intent intent = new Intent(this, KeyManagementActivity.class);
+        intent.putExtra("is_first_run", isFirstRun);
+        startActivityForResult(intent, REQUEST_CODE_KEY_SETUP);
+    }
+
     private void showUnifiedMenu() {
-        String serverInfo = connectionManager.getUser() + "@" + connectionManager.getHost() + ":" + connectionManager.getPort();
         boolean isConnected = connectionManager.isConnected();
         boolean hapticOn = HapticHelper.getInstance(this).isHapticEnabled();
 
-        String[] options = new String[] {
-            isConnected ? "⚡ Reconnect Session" : "⚡ Connect",
-            "⚙️ Server Connection Settings",
-            "🔑 SSH Keys Management",
-            "🔄 Check for Updates (OTA)",
-            "🧹 Clear Prompt Line (Ctrl+U / Alt+DEL)",
-            "🛑 Cancel / Break (Ctrl+C / Alt+C)",
-            "📳 Haptic Feedback: " + (hapticOn ? "ON" : "OFF"),
-            "⚡ Antigravity Slash Commands (/)...",
-            "❓ FAQ & Shortcuts Guide",
-            "ℹ️ Connection Status Details",
-            isConnected ? "❌ Disconnect" : "🔌 Edit Host"
-        };
+        java.util.List<String> optionsList = new java.util.ArrayList<>();
+        optionsList.add(isConnected ? "⚡ Reconnect Session" : "⚡ Connect");
+        optionsList.add("⚙️ Connection & Key Settings");
+        optionsList.add("🔄 Check for Updates (OTA)");
+        optionsList.add("🧹 Clear Prompt Line (Ctrl+U / Alt+DEL)");
+        optionsList.add("🛑 Cancel / Break (Ctrl+C / Alt+C)");
+        optionsList.add("📳 Haptic Feedback: " + (hapticOn ? "ON" : "OFF"));
+        optionsList.add("⚡ Antigravity Slash Commands (/)...");
+        optionsList.add("❓ FAQ & Shortcuts Guide");
+        optionsList.add("ℹ️ Connection Status Details");
+        if (isConnected) {
+            optionsList.add("❌ Disconnect");
+        }
+
+        final String[] options = optionsList.toArray(new String[0]);
 
         new AlertDialog.Builder(this)
             .setTitle("BerryBot Menu • " + (lastStatusMessage != null ? lastStatusMessage : "Menu"))
             .setItems(options, (dialog, which) -> {
-                if (which == 0) {
+                String chosen = options[which];
+                if (chosen.contains("Connect") || chosen.contains("Reconnect")) {
                     android.content.SharedPreferences prefs = getSharedPreferences("berrybot_prefs", MODE_PRIVATE);
                     String h = prefs.getString("host", "").trim();
                     String u = prefs.getString("user", "").trim();
                     if (!prefs.getBoolean("key_setup_settled", false) || h.isEmpty() || u.isEmpty()) {
-                        Intent intent = new Intent(this, KeyManagementActivity.class);
-                        intent.putExtra("is_first_run", true);
-                        startActivityForResult(intent, REQUEST_CODE_KEY_SETUP);
+                        openConnectionSettingsActivity(true);
                     } else {
-                        Toast.makeText(this, "Reconnecting...", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, "Connecting...", Toast.LENGTH_SHORT).show();
                         connectionManager.connect();
                         if (terminalView != null) terminalView.requestFocus();
                     }
-                } else if (which == 1) {
-                    showServerConfigDialog();
-                } else if (which == 2) {
-                    Intent intent = new Intent(this, KeyManagementActivity.class);
-                    startActivityForResult(intent, REQUEST_CODE_KEY_SETUP);
-                } else if (which == 3) {
+                } else if (chosen.contains("Connection & Key Settings")) {
+                    openConnectionSettingsActivity(false);
+                } else if (chosen.contains("Check for Updates")) {
                     UpdateManager.getInstance().checkForUpdates(this, true);
-                } else if (which == 4) {
+                } else if (chosen.contains("Clear Prompt Line")) {
                     if (terminalBridge != null) {
                         terminalBridge.sendString("\025");
                     }
                     HapticHelper.tick(this);
                     Toast.makeText(this, "Cleared line", Toast.LENGTH_SHORT).show();
                     if (terminalView != null) terminalView.requestFocus();
-                } else if (which == 5) {
+                } else if (chosen.contains("Cancel / Break")) {
                     if (terminalBridge != null) {
                         terminalBridge.sendString("\003");
                     }
                     HapticHelper.tick(this);
                     Toast.makeText(this, "Sent Cancel (Ctrl+C)", Toast.LENGTH_SHORT).show();
                     if (terminalView != null) terminalView.requestFocus();
-                } else if (which == 6) {
+                } else if (chosen.contains("Haptic Feedback")) {
                     boolean nowEnabled = !HapticHelper.getInstance(this).isHapticEnabled();
                     HapticHelper.getInstance(this).setHapticEnabled(nowEnabled);
-                    if (nowEnabled) {
-                        HapticHelper.tick(this);
-                        Toast.makeText(this, "Haptic Feedback: ON", Toast.LENGTH_SHORT).show();
-                    } else {
-                        Toast.makeText(this, "Haptic Feedback: OFF", Toast.LENGTH_SHORT).show();
-                    }
+                    Toast.makeText(this, "Haptic Feedback: " + (nowEnabled ? "ON" : "OFF"), Toast.LENGTH_SHORT).show();
+                    if (nowEnabled) HapticHelper.tick(this);
                     if (terminalView != null) terminalView.requestFocus();
-                } else if (which == 7) {
+                } else if (chosen.contains("Slash Commands")) {
                     showSlashCommandPicker(null);
-                } else if (which == 8) {
+                } else if (chosen.contains("FAQ & Shortcuts")) {
                     showFaqDialog();
-                } else if (which == 9) {
+                } else if (chosen.contains("Connection Status Details")) {
                     showStatusDetailDialog();
-                } else if (which == 10) {
+                } else if (chosen.contains("Disconnect")) {
                     if (connectionManager.isConnected()) {
                         connectionManager.disconnect();
                         Toast.makeText(this, "Disconnected", Toast.LENGTH_SHORT).show();
-                    } else {
-                        showServerConfigDialog();
                     }
                     if (terminalView != null) terminalView.requestFocus();
                 }
@@ -359,53 +352,12 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
             .setMessage((lastStatusMessage != null ? lastStatusMessage : "No status") + 
                         "\n\nServer: " + connectionManager.getUser() + "@" + connectionManager.getHost() + ":" + connectionManager.getPort() +
                         "\n\nKey: " + fp)
-            .setPositiveButton("Edit Server", (dialog, which) -> showServerConfigDialog())
+            .setPositiveButton("Settings", (dialog, which) -> openConnectionSettingsActivity(false))
             .setNeutralButton("Reconnect", (dialog, which) -> {
                 connectionManager.connect();
                 terminalView.requestFocus();
             })
             .setNegativeButton("Close", null)
-            .show();
-    }
-
-    private void showServerConfigDialog() {
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(32, 16, 32, 16);
-
-        final EditText etHost = new EditText(this);
-        etHost.setHint("Server Host / IP");
-        etHost.setText(connectionManager.getHost());
-        layout.addView(etHost);
-
-        final EditText etPort = new EditText(this);
-        etPort.setHint("Port (e.g. 2222)");
-        etPort.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-        etPort.setText(String.valueOf(connectionManager.getPort()));
-        layout.addView(etPort);
-
-        final EditText etUser = new EditText(this);
-        etUser.setHint("Username");
-        etUser.setText(connectionManager.getUser());
-        layout.addView(etUser);
-
-        new AlertDialog.Builder(this)
-            .setTitle("Server Connection")
-            .setView(layout)
-            .setPositiveButton("Save & Connect", (dialog, which) -> {
-                String newHost = etHost.getText().toString().trim();
-                String portStr = etPort.getText().toString().trim();
-                String newUser = etUser.getText().toString().trim();
-                int newPort = 2222;
-                try {
-                    newPort = Integer.parseInt(portStr);
-                } catch (NumberFormatException ignored) {}
-                if (!newHost.isEmpty()) {
-                    connectionManager.updateConnectionParams(newHost, newPort, newUser);
-                    connectionManager.connect();
-                }
-            })
-            .setNegativeButton("Cancel", null)
             .show();
     }
 
