@@ -1,5 +1,6 @@
 package com.berrybot.hardware;
 
+import android.app.KeyguardManager;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -77,13 +78,13 @@ public class LedNotificationManager {
             String action = intent.getAction();
             if (Intent.ACTION_SCREEN_OFF.equals(action)) {
                 isScreenOn = false;
-                refreshNotification();
+                if (currentState == LedState.COMPLETE) {
+                    refreshNotification();
+                }
             } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
                 isScreenOn = true;
-                if (isAppForeground && currentState == LedState.COMPLETE) {
-                    // User turned screen on while app is in foreground and viewed response
-                    onUserViewedResponse();
-                }
+                // Do NOT auto-cancel on screen on! The user might just be looking at the lock screen.
+                // The alert is dismissed when the user unlocks and interacts with the app.
             }
         }
     };
@@ -140,8 +141,10 @@ public class LedNotificationManager {
             } catch (Throwable ignored) {}
         }
 
-        // If the user picked up the phone while green LED was active, transition to idle Blue
-        if (currentState == LedState.COMPLETE) {
+        // If the user unlocked the phone while response ready was active, transition to idle Blue
+        KeyguardManager km = (KeyguardManager) context.getSystemService(Context.KEYGUARD_SERVICE);
+        boolean isLocked = km != null && km.inKeyguardRestrictedInputMode();
+        if (!isLocked && currentState == LedState.COMPLETE) {
             onUserViewedResponse();
         } else if (currentState == LedState.CONNECTED) {
             refreshNotification();
@@ -288,12 +291,9 @@ public class LedNotificationManager {
             stateListener.onLedStateChanged(currentState, statusText);
         }
 
-        // Vibrate once on completion
+        // Vibrate once on completion using direct hardware vibrator
         if (withVibrate) {
-            if (isAppForeground && isScreenOn) {
-                // Subtle single tactile tick if user is actively looking at screen
-                HapticHelper.getInstance(context).performTick(25);
-            }
+            HapticHelper.getInstance(context).performCompletionPattern();
         }
 
         postNotification(title, statusText, Color.GREEN, 800, 800, false);
@@ -373,15 +373,7 @@ public class LedNotificationManager {
             notification.defaults &= ~Notification.DEFAULT_LIGHTS;
 
             // BlackBerry 10 Hub requires a vibrate/sound signature to elevate notification to hardware LED
-            if (sound || ledColor == Color.GREEN) {
-                if (isAppForeground && isScreenOn) {
-                    notification.vibrate = null; // Do not buzz notification if user is actively watching screen
-                } else {
-                    notification.vibrate = new long[]{0, 150, 100, 150}; // Tactile completion alert for desk/pocket
-                }
-            } else {
-                notification.vibrate = new long[]{0, 1}; // Micro-tick (1ms) to engage BB10 Hub alert driver without user vibration
-            }
+            notification.vibrate = new long[]{0, 1}; // Micro-tick (1ms) to engage BB10 Hub alert driver without user vibration
 
             notification.ledARGB = ledColor;
             notification.ledOnMS = onMs;

@@ -159,14 +159,20 @@ public class UpdateManager {
     private void checkInternal(final Activity activity, final boolean userInitiated) {
         String configuredUrl = getUpdateManifestUrl(activity);
         lastFetchError = null;
-        String json = fetchUrlWithRedirects(configuredUrl, 0);
+        String requestUrl = configuredUrl.contains("?") 
+                ? (configuredUrl + "&_t=" + System.currentTimeMillis()) 
+                : (configuredUrl + "?_t=" + System.currentTimeMillis());
+        String json = fetchUrlWithRedirects(requestUrl, 0);
 
         if (json == null || json.length() == 0) {
             // If primary endpoint failed (e.g. SSL error on raw.githubusercontent.com), try CDN fallbacks
             for (String fallbackUrl : FALLBACK_UPDATE_URLS) {
                 if (!fallbackUrl.equals(configuredUrl)) {
                     Log.i(TAG, "Attempting fallback update URL: " + fallbackUrl);
-                    json = fetchUrlWithRedirects(fallbackUrl, 0);
+                    String fbRequestUrl = fallbackUrl.contains("?") 
+                            ? (fallbackUrl + "&_t=" + System.currentTimeMillis()) 
+                            : (fallbackUrl + "?_t=" + System.currentTimeMillis());
+                    json = fetchUrlWithRedirects(fbRequestUrl, 0);
                     if (json != null && json.length() > 0) {
                         break;
                     }
@@ -519,8 +525,12 @@ public class UpdateManager {
             }
             conn.setConnectTimeout(15000);
             conn.setReadTimeout(25000);
+            conn.setUseCaches(false);
+            conn.setDefaultUseCaches(false);
             conn.setInstanceFollowRedirects(false);
             conn.setRequestProperty("User-Agent", "BerryBot-OTA/1.0");
+            conn.setRequestProperty("Cache-Control", "no-cache, no-store, must-revalidate");
+            conn.setRequestProperty("Pragma", "no-cache");
 
             int code = conn.getResponseCode();
             if (code == HttpURLConnection.HTTP_MOVED_PERM 

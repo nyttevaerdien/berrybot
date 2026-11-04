@@ -93,7 +93,7 @@ public class HapticHelper {
         if (!isHapticEnabled()) return;
         try {
             if (vibrator != null && vibrator.hasVibrator()) {
-                vibrator.vibrate(new long[]{0, 50, 70, 80}, -1);
+                vibrator.vibrate(new long[]{0, 150, 100, 200}, -1);
             }
         } catch (Throwable t) {
             Log.w(TAG, "Vibrate completion pattern failed: " + t.getMessage());
