@@ -158,6 +158,13 @@ public class LedNotificationManager {
         refreshNotification();
     }
 
+    public void onUserInteraction() {
+        // If user interacts with device while response complete alert is active, clear it
+        if (currentState == LedState.COMPLETE) {
+            onUserViewedResponse();
+        }
+    }
+
     public void onConnecting() {
         isStreaming = false;
         promptPending = false;
@@ -286,9 +293,6 @@ public class LedNotificationManager {
             if (isAppForeground && isScreenOn) {
                 // Subtle single tactile tick if user is actively looking at screen
                 HapticHelper.getInstance(context).performTick(25);
-            } else {
-                // Full tactile completion buzz pattern for pocket / desk alert
-                HapticHelper.getInstance(context).performCompletionPattern();
             }
         }
 
@@ -302,47 +306,36 @@ public class LedNotificationManager {
             stateListener.onLedStateChanged(state, statusText);
         }
 
-        int ledColor;
-        int onMs;
-        int offMs;
-
         switch (state) {
-            case CONNECTING:
-                // Pulsing Warm Amber / Yellow
-                ledColor = 0xFFFFB800;
-                onMs = 400;
-                offMs = 400;
-                break;
             case CONNECTED:
-                // Constant Blue breathing pulse - Agent is Idle
-                ledColor = 0xFF007AFF;
-                onMs = 300;
-                offMs = 2500;
+                // When connected and idle: clear notification so BlackBerry hardware LED stays OFF (not flashing red!)
+                clearNotificationOnly();
                 break;
             case STREAMING:
-                // Pulsing Amber / Yellow - Agent thinking / active
-                ledColor = 0xFFFFB800;
-                onMs = 500;
-                offMs = 500;
+            case CONNECTING:
+                // While thinking/streaming: keep hardware LED quiet; on-screen dot displays yellow
+                clearNotificationOnly();
                 break;
             case COMPLETE:
-                // Active Green - Response ready! Blinks until user picks up phone
-                ledColor = Color.GREEN;
-                onMs = 800;
-                offMs = 800;
+                // Response ready: flash hardware notification LED until user picks up phone & views response
+                postNotification("BerryBot • Antigravity", statusText, Color.GREEN, 800, 800, false);
                 break;
             case ERROR:
-                // Pulsing Red
-                ledColor = Color.RED;
-                onMs = 400;
-                offMs = 800;
+                // Disconnected or connection failure
+                postNotification("BerryBot", statusText, Color.RED, 400, 800, false);
                 break;
             default:
-                clearNotification();
-                return;
+                clearNotificationOnly();
+                break;
         }
+    }
 
-        postNotification("BerryBot", statusText, ledColor, onMs, offMs, false);
+    private void clearNotificationOnly() {
+        try {
+            if (notificationManager != null) {
+                notificationManager.cancel(NOTIFICATION_ID);
+            }
+        } catch (Throwable ignored) {}
     }
 
     private void postNotification(String title, String text, int ledColor, int onMs, int offMs, boolean sound) {
@@ -381,7 +374,11 @@ public class LedNotificationManager {
 
             // BlackBerry 10 Hub requires a vibrate/sound signature to elevate notification to hardware LED
             if (sound || ledColor == Color.GREEN) {
-                notification.vibrate = new long[]{0, 200, 150, 200};
+                if (isAppForeground && isScreenOn) {
+                    notification.vibrate = null; // Do not buzz notification if user is actively watching screen
+                } else {
+                    notification.vibrate = new long[]{0, 150, 100, 150}; // Tactile completion alert for desk/pocket
+                }
             } else {
                 notification.vibrate = new long[]{0, 1}; // Micro-tick (1ms) to engage BB10 Hub alert driver without user vibration
             }
@@ -401,11 +398,7 @@ public class LedNotificationManager {
     public synchronized void clearNotification() {
         currentState = LedState.NONE;
         customCompleteMessage = null;
-        try {
-            if (notificationManager != null) {
-                notificationManager.cancel(NOTIFICATION_ID);
-            }
-        } catch (Throwable ignored) {}
+        clearNotificationOnly();
     }
 
     public synchronized void cleanup() {

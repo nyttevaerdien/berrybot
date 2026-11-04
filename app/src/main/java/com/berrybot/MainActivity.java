@@ -717,6 +717,9 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
     @Override
     public void onUserInteraction() {
         super.onUserInteraction();
+        if (ledNotificationManager != null) {
+            ledNotificationManager.onUserInteraction();
+        }
         refreshScreenAwake();
     }
 
