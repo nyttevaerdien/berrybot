@@ -56,6 +56,55 @@ public class VDUBuffer {
   private int topMargin;                               /* top scroll margin */
   private int bottomMargin;                         /* bottom scroll margin */
 
+  // Alternate Screen Buffer state
+  private boolean isAltBuffer = false;
+  private char[][] normalCharArray;
+  private long[][] normalCharAttributes;
+  private int normalScreenBase, normalWindowBase, normalBufSize, normalMaxBufSize;
+  private int normalCursorX, normalCursorY;
+  private int cursorStyle = 0; // 0,1,2: block; 3,4: underline; 5,6: bar
+
+  public int getCursorStyle() { return cursorStyle; }
+  public void setCursorStyle(int style) { this.cursorStyle = style; }
+
+  public synchronized void setAlternateBuffer(boolean enable) {
+    if (isAltBuffer == enable) return;
+    isAltBuffer = enable;
+    if (enable) {
+      normalCharArray = charArray;
+      normalCharAttributes = charAttributes;
+      normalScreenBase = screenBase;
+      normalWindowBase = windowBase;
+      normalBufSize = bufSize;
+      normalMaxBufSize = maxBufSize;
+      normalCursorX = cursorX;
+      normalCursorY = cursorY;
+
+      charArray = new char[height][];
+      charAttributes = new long[height][];
+      for (int i = 0; i < height; i++) {
+        charArray[i] = new char[width];
+        Arrays.fill(charArray[i], ' ');
+        charAttributes[i] = new long[width];
+      }
+      bufSize = maxBufSize = height;
+      screenBase = windowBase = cursorX = cursorY = 0;
+    } else {
+      if (normalCharArray != null) {
+        charArray = normalCharArray;
+        charAttributes = normalCharAttributes;
+        screenBase = normalScreenBase;
+        windowBase = normalWindowBase;
+        bufSize = normalBufSize;
+        maxBufSize = normalMaxBufSize;
+        cursorX = normalCursorX;
+        cursorY = normalCursorY;
+      }
+    }
+    markLine(0, height);
+    redraw();
+  }
+
   // Zero-allocation row pools for line insertion / scrolling
   private char[][] rowCharPool = new char[16][];
   private long[][] rowAttrPool = new long[16][];
@@ -430,6 +479,25 @@ public class VDUBuffer {
       abuf = charAttributes;
     } else {
       if (n > (bottom - top) + 1) n = (bottom - top) + 1;
+
+      // Restricted margin scrolling (top > 0 or bottom < height - 1) must be in-place
+      // and NEVER pollute the scrollback buffer or modify screenBase
+      if (topMargin > 0 || bottomMargin < height - 1) {
+        int start = oldBase + topMargin;
+        int count = bottomMargin - topMargin;
+        char[] recycledC = charArray[start];
+        long[] recycledA = charAttributes[start];
+        System.arraycopy(charArray, start + 1, charArray, start, count);
+        System.arraycopy(charAttributes, start + 1, charAttributes, start, count);
+        Arrays.fill(recycledC, ' ');
+        Arrays.fill(recycledA, 0L);
+        charArray[oldBase + bottomMargin] = recycledC;
+        charAttributes[oldBase + bottomMargin] = recycledA;
+        markLine(topMargin, bottomMargin - topMargin + 1);
+        redraw();
+        return;
+      }
+
       if (bufSize < maxBufSize) {
         if (bufSize + n > maxBufSize) {
           offset = n - (maxBufSize - bufSize);
@@ -449,8 +517,8 @@ public class VDUBuffer {
 
       // Check if charArray needs expansion to hold newBufSize
       if (charArray.length < newBufSize) {
-        cbuf = new char[newBufSize][width];
-        abuf = new long[newBufSize][width];
+        cbuf = new char[newBufSize][];
+        abuf = new long[newBufSize][];
         for (int i = 0; i < newBufSize; i++) {
           cbuf[i] = new char[width];
           Arrays.fill(cbuf[i], ' ');
@@ -801,8 +869,8 @@ public class VDUBuffer {
     if (charArray == null || charArray.length < maxBufSize) {
       int allocRows = maxBufSize;
       int w = width > 0 ? width : 80;
-      char cbuf[][] = new char[allocRows][w];
-      long abuf[][] = new long[allocRows][w];
+      char cbuf[][] = new char[allocRows][];
+      long abuf[][] = new long[allocRows][];
       for (int i = 0; i < allocRows; i++) {
         cbuf[i] = new char[w];
         Arrays.fill(cbuf[i], ' ');
@@ -882,8 +950,8 @@ public class VDUBuffer {
 
 
     int allocRows = Math.max(maxBufSize, bufSize);
-    cbuf = new char[allocRows][w];
-    abuf = new long[allocRows][w];
+    cbuf = new char[allocRows][];
+    abuf = new long[allocRows][];
 
     for (int i = 0; i < allocRows; i++) {
       cbuf[i] = new char[w];

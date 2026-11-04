@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
@@ -17,10 +18,12 @@ import com.berrybot.MainActivity;
 import com.berrybot.R;
 
 /**
- * BlackBerry Classic RGB Notification LED and background alert manager.
+ * BlackBerry Classic RGB Notification LED and background push alert manager.
  * Drives the physical top-mounted RGB LED via Android Notification.FLAG_SHOW_LIGHTS:
- * - Pulsing Cyan: active SSH output streaming
- * - Solid Green: Antigravity response generation finished
+ * - Pulsing Amber/Yellow: Connecting to SSH server
+ * - Solid Green (brief): SSH connection established
+ * - Pulsing Cyan: Antigravity agent thinking / streaming response
+ * - Solid Green + Push (sound & vibrate): Antigravity agent finished task / response ready
  * - Pulsing Red: SSH connection error or disconnect
  *
  * Fully compliant with Android 4.3 Jelly Bean (API 18) Dalvik runtime on BlackBerry 10.
@@ -32,9 +35,11 @@ public class LedNotificationManager {
 
     public enum LedState {
         NONE,
-        STREAMING, // Pulsing Cyan
-        COMPLETE,  // Solid Green
-        ERROR      // Pulsing Red
+        CONNECTING, // Pulsing Amber / Yellow (400ms on / 400ms off)
+        CONNECTED,  // Subtle solid green confirmation (800ms)
+        STREAMING,  // Pulsing Cyan (400ms on / 800ms off) - Agent is active/streaming
+        COMPLETE,   // Solid Green - Agent finished!
+        ERROR       // Pulsing Red (300ms on / 500ms off)
     }
 
     private static volatile LedNotificationManager instance;
@@ -48,6 +53,7 @@ public class LedNotificationManager {
     private volatile boolean isScreenOn = true;
     private volatile boolean isStreaming = false;
     private LedState currentState = LedState.NONE;
+    private String customCompleteMessage = null;
 
     private final Runnable streamIdleRunnable = new Runnable() {
         @Override
@@ -128,6 +134,30 @@ public class LedNotificationManager {
         updateLedNotification();
     }
 
+    public void onConnecting() {
+        isStreaming = false;
+        mainHandler.removeCallbacks(streamIdleRunnable);
+        if (shouldShowNotification()) {
+            setLedState(LedState.CONNECTING, "Connecting to SSH server…");
+        }
+    }
+
+    public void onConnected() {
+        isStreaming = false;
+        mainHandler.removeCallbacks(streamIdleRunnable);
+        if (shouldShowNotification()) {
+            setLedState(LedState.CONNECTED, "Connected to SSH server");
+            mainHandler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    clearNotification();
+                }
+            }, 1200);
+        } else {
+            clearNotification();
+        }
+    }
+
     public void onDataReceived(int length) {
         if (length <= 0) return;
 
@@ -146,6 +176,7 @@ public class LedNotificationManager {
 
     public void onPromptSubmitted() {
         isStreaming = true;
+        customCompleteMessage = null;
         mainHandler.removeCallbacks(streamIdleRunnable);
         mainHandler.postDelayed(streamIdleRunnable, 6000);
         if (shouldShowNotification()) {
@@ -155,8 +186,24 @@ public class LedNotificationManager {
 
     public void onStreamingComplete() {
         if (currentState != LedState.ERROR) {
-            setLedState(LedState.COMPLETE, "Antigravity response ready!");
+            String msg = (customCompleteMessage != null && !customCompleteMessage.isEmpty())
+                    ? customCompleteMessage
+                    : "Antigravity response ready!";
+            triggerPushNotification("BerryBot • Antigravity Agent", msg, true);
         }
+    }
+
+    /**
+     * Explicit trigger to send push notification and LED alert when agent finishes.
+     * Can be invoked via OSC 9, OSC 777, or completion hooks.
+     */
+    public void sendAgentPushNotification(String title, String message) {
+        isStreaming = false;
+        mainHandler.removeCallbacks(streamIdleRunnable);
+        this.customCompleteMessage = message;
+        String alertTitle = (title != null && !title.isEmpty()) ? title : "BerryBot • Antigravity Agent";
+        String alertBody = (message != null && !message.isEmpty()) ? message : "Agent task finished • Response ready";
+        triggerPushNotification(alertTitle, alertBody, true);
     }
 
     public void onError(String message) {
@@ -169,13 +216,6 @@ public class LedNotificationManager {
         isStreaming = false;
         mainHandler.removeCallbacks(streamIdleRunnable);
         setLedState(LedState.ERROR, "BerryBot disconnected");
-    }
-
-    public void onConnected() {
-        if (currentState == LedState.ERROR) {
-            currentState = LedState.NONE;
-            clearNotification();
-        }
     }
 
     private boolean shouldShowNotification() {
@@ -192,14 +232,70 @@ public class LedNotificationManager {
 
     private String getStatusTextForState(LedState state) {
         switch (state) {
+            case CONNECTING:
+                return "Connecting to SSH server…";
+            case CONNECTED:
+                return "Connected to SSH server";
             case STREAMING:
                 return "Antigravity streaming response…";
             case COMPLETE:
-                return "Antigravity response ready!";
+                return (customCompleteMessage != null && !customCompleteMessage.isEmpty())
+                        ? customCompleteMessage
+                        : "Antigravity response ready!";
             case ERROR:
                 return "SSH connection alert / error";
             default:
                 return "BerryBot active";
+        }
+    }
+
+    /**
+     * Triggers a rich push notification with sound, vibration, and top notification LED.
+     */
+    private synchronized void triggerPushNotification(String title, String statusText, boolean withPushAlert) {
+        this.currentState = LedState.COMPLETE;
+
+        // In foreground and screen on: provide tactile completion vibration
+        if (!shouldShowNotification()) {
+            HapticHelper.getInstance(context).performCompletionPattern();
+            return;
+        }
+
+        try {
+            Intent intent = new Intent(context, MainActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+
+            int pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= 23) {
+                pendingFlags |= 0x04000000; // PendingIntent.FLAG_IMMUTABLE
+            }
+            PendingIntent pi = PendingIntent.getActivity(context, 0, intent, pendingFlags);
+
+            Notification.Builder builder = new Notification.Builder(context)
+                .setSmallIcon(R.drawable.ic_launcher)
+                .setContentTitle(title)
+                .setContentText(statusText)
+                .setContentIntent(pi)
+                .setAutoCancel(true)
+                .setOngoing(false);
+
+            if (withPushAlert) {
+                // Configure system sound and tactile vibration pattern
+                builder.setDefaults(Notification.DEFAULT_SOUND);
+                Notification notification = builder.build();
+                notification.flags |= Notification.FLAG_SHOW_LIGHTS | Notification.FLAG_AUTO_CANCEL;
+                notification.vibrate = new long[]{0, 150, 100, 150};
+                notification.ledARGB = Color.GREEN;
+                notification.ledOnMS = 1000;
+                notification.ledOffMS = 0; // Solid Green constant ON
+                if (notificationManager != null) {
+                    notificationManager.notify(NOTIFICATION_ID, notification);
+                }
+            } else {
+                setLedState(LedState.COMPLETE, statusText);
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "Failed to trigger push notification", t);
         }
     }
 
@@ -212,7 +308,12 @@ public class LedNotificationManager {
         try {
             Intent intent = new Intent(context, MainActivity.class);
             intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            PendingIntent pi = PendingIntent.getActivity(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+
+            int pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= 23) {
+                pendingFlags |= 0x04000000; // PendingIntent.FLAG_IMMUTABLE
+            }
+            PendingIntent pi = PendingIntent.getActivity(context, 0, intent, pendingFlags);
 
             Notification.Builder builder = new Notification.Builder(context)
                 .setSmallIcon(R.drawable.ic_launcher)
@@ -226,6 +327,20 @@ public class LedNotificationManager {
             int offMs;
 
             switch (state) {
+                case CONNECTING:
+                    // Pulsing Warm Amber / Yellow
+                    ledColor = 0xFFE5C07B;
+                    onMs = 400;
+                    offMs = 400;
+                    builder.setOngoing(true);
+                    break;
+                case CONNECTED:
+                    // Subtle solid green confirmation
+                    ledColor = Color.GREEN;
+                    onMs = 800;
+                    offMs = 0;
+                    builder.setOngoing(false);
+                    break;
                 case STREAMING:
                     // Pulsing Cyan
                     ledColor = Color.CYAN;
@@ -268,6 +383,7 @@ public class LedNotificationManager {
 
     public synchronized void clearNotification() {
         currentState = LedState.NONE;
+        customCompleteMessage = null;
         try {
             if (notificationManager != null) {
                 notificationManager.cancel(NOTIFICATION_ID);
@@ -275,10 +391,11 @@ public class LedNotificationManager {
         } catch (Throwable ignored) {}
     }
 
-    public void cleanup() {
+    public synchronized void cleanup() {
         clearNotification();
         try {
             context.unregisterReceiver(screenReceiver);
         } catch (Throwable ignored) {}
+        instance = null; // Reset singleton instance so recreation re-registers receiver
     }
 }

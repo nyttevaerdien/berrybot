@@ -28,6 +28,7 @@
         <activity
             android:name=".KeyManagementActivity"
             android:label="@string/title_key_management"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|fontScale"
             android:exported="false" />
 
     </application>

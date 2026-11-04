@@ -77,8 +77,14 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
         }
     };
 
+    private boolean isActivityAlive() {
+        if (isFinishing()) return false;
+        if (android.os.Build.VERSION.SDK_INT >= 17 && isDestroyed()) return false;
+        return true;
+    }
+
     private void setScreenAwake(boolean awake) {
-        if (isFinishing()) return;
+        if (!isActivityAlive()) return;
         try {
             if (awake) {
                 getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -90,10 +96,15 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
         }
     }
 
+    private long lastScreenAwakeRefreshTime = 0;
     private void refreshScreenAwake() {
-        setScreenAwake(true);
-        mainHandler.removeCallbacks(screenDimRunnable);
-        mainHandler.postDelayed(screenDimRunnable, SCREEN_ON_STREAMING_TIMEOUT_MS);
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - lastScreenAwakeRefreshTime > 1500) {
+            lastScreenAwakeRefreshTime = now;
+            setScreenAwake(true);
+            mainHandler.removeCallbacks(screenDimRunnable);
+            mainHandler.postDelayed(screenDimRunnable, SCREEN_ON_STREAMING_TIMEOUT_MS);
+        }
     }
 
     @Override
@@ -101,19 +112,26 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
         super.onCreate(savedInstanceState);
 
         // Crash handler to capture Dalvik exceptions on BlackBerry 10
+        final Context appContext = getApplicationContext();
+        final Thread.UncaughtExceptionHandler defaultHandler = Thread.getDefaultUncaughtExceptionHandler();
         Thread.setDefaultUncaughtExceptionHandler((thread, ex) -> {
             try {
                 java.io.StringWriter sw = new java.io.StringWriter();
                 ex.printStackTrace(new java.io.PrintWriter(sw));
                 String stack = sw.toString();
+                stack = stack.replaceAll("(?i)(password|secret|passphrase|privatekey)=[^&\\s]+", "$1=***");
                 android.util.Log.e("BerryBot.Crash", "CRASH in " + thread.getName() + ": " + stack);
-                getSharedPreferences("berrybot_crash", MODE_PRIVATE)
+                appContext.getSharedPreferences("berrybot_crash", MODE_PRIVATE)
                     .edit()
                     .putString("crash_log", "Thread: " + thread.getName() + "\n\n" + stack)
                     .commit();
             } catch (Throwable ignored) {}
-            android.os.Process.killProcess(android.os.Process.myPid());
-            System.exit(10);
+            if (defaultHandler != null) {
+                defaultHandler.uncaughtException(thread, ex);
+            } else {
+                android.os.Process.killProcess(android.os.Process.myPid());
+                System.exit(10);
+            }
         });
 
         setContentView(R.layout.activity_main);
@@ -135,6 +153,13 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
 
         terminalBridge = new TerminalBridge(this);
         terminalBridge.setConnectionManager(connectionManager);
+        terminalBridge.setTitleListener(title -> {
+            runOnUiThread(() -> {
+                if (isActivityAlive() && tvStatusText != null && title != null && !title.trim().isEmpty()) {
+                    tvStatusText.setText(title.trim());
+                }
+            });
+        });
 
         // Hardware UX: Haptic tactile feedback & RGB Notification LED managers
         HapticHelper.getInstance(this);
@@ -237,6 +262,7 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
     }
 
     private void showSlashCommandPicker(final EditText targetEditText) {
+        if (!isActivityAlive()) return;
         new AlertDialog.Builder(this)
             .setTitle("Antigravity Slash Commands")
             .setItems(SLASH_COMMAND_LABELS, (dialog, which) -> {
@@ -269,19 +295,19 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
     }
 
     private void showUnifiedMenu() {
+        if (!isActivityAlive()) return;
         boolean isConnected = connectionManager.isConnected();
         boolean hapticOn = HapticHelper.getInstance(this).isHapticEnabled();
 
         java.util.List<String> optionsList = new java.util.ArrayList<>();
         optionsList.add(isConnected ? "⚡ Reconnect Session" : "⚡ Connect");
-        optionsList.add("⚙️ Connection & Key Settings");
+        optionsList.add("⚙️ Connection Settings");
         optionsList.add("🔄 Check for Updates (OTA)");
         optionsList.add("🧹 Clear Prompt Line (Ctrl+U / Alt+DEL)");
         optionsList.add("🛑 Cancel / Break (Ctrl+C / Alt+C)");
         optionsList.add("📳 Haptic Feedback: " + (hapticOn ? "ON" : "OFF"));
         optionsList.add("⚡ Antigravity Slash Commands (/)...");
         optionsList.add("❓ FAQ & Shortcuts Guide");
-        optionsList.add("ℹ️ Connection Status Details");
         if (isConnected) {
             optionsList.add("❌ Disconnect");
         }
@@ -303,7 +329,7 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
                         connectionManager.connect();
                         if (terminalView != null) terminalView.requestFocus();
                     }
-                } else if (chosen.contains("Connection & Key Settings")) {
+                } else if (chosen.contains("Connection Settings")) {
                     openConnectionSettingsActivity(false);
                 } else if (chosen.contains("Check for Updates")) {
                     UpdateManager.getInstance().checkForUpdates(this, true);
@@ -331,8 +357,6 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
                     showSlashCommandPicker(null);
                 } else if (chosen.contains("FAQ & Shortcuts")) {
                     showFaqDialog();
-                } else if (chosen.contains("Connection Status Details")) {
-                    showStatusDetailDialog();
                 } else if (chosen.contains("Disconnect")) {
                     if (connectionManager.isConnected()) {
                         connectionManager.disconnect();
@@ -340,22 +364,6 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
                     }
                     if (terminalView != null) terminalView.requestFocus();
                 }
-            })
-            .setNegativeButton("Close", null)
-            .show();
-    }
-
-    private void showStatusDetailDialog() {
-        String fp = (keyStorage != null) ? keyStorage.getFingerprint() : "Unknown";
-        new AlertDialog.Builder(this)
-            .setTitle("Connection Status")
-            .setMessage((lastStatusMessage != null ? lastStatusMessage : "No status") + 
-                        "\n\nServer: " + connectionManager.getUser() + "@" + connectionManager.getHost() + ":" + connectionManager.getPort() +
-                        "\n\nKey: " + fp)
-            .setPositiveButton("Settings", (dialog, which) -> openConnectionSettingsActivity(false))
-            .setNeutralButton("Reconnect", (dialog, which) -> {
-                connectionManager.connect();
-                terminalView.requestFocus();
             })
             .setNegativeButton("Close", null)
             .show();
@@ -374,13 +382,15 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
         Button btnPgDn = (Button) findViewById(R.id.btnPgDn);
 
         btnEsc.setOnClickListener(v -> {
-            terminalView.sendEsc();
-            terminalView.requestFocus();
+            HapticHelper.getInstance(this).performKeystrokeTick();
+            terminalBridge.sendEscape();
+            if (terminalView != null) terminalView.requestFocus();
         });
 
         btnTab.setOnClickListener(v -> {
-            terminalView.sendTab();
-            terminalView.requestFocus();
+            HapticHelper.getInstance(this).performKeystrokeTick();
+            terminalBridge.sendTab();
+            if (terminalView != null) terminalView.requestFocus();
         });
 
         btnCtrl.setOnClickListener(v -> {
@@ -465,6 +475,7 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
     }
 
     private void showSendTextDialog(String initialText) {
+        if (!isActivityAlive()) return;
         LinearLayout container = new LinearLayout(this);
         container.setOrientation(LinearLayout.VERTICAL);
         container.setPadding(24, 16, 24, 16);
@@ -524,6 +535,7 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
     }
 
     private void showCopyDialog() {
+        if (!isActivityAlive()) return;
         final String screenText = terminalBridge != null ? terminalBridge.getVisibleScreenText() : "";
         final String fullText = terminalBridge != null ? terminalBridge.getFullBufferText() : "";
         final String clipText = getClipboardText();
@@ -568,21 +580,26 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
     }
 
     private void showFaqDialog() {
+        if (!isActivityAlive()) return;
         String faqText = 
             "★ BERRYBOT & ANTIGRAVITY HARDWARE UX GUIDE ★\n\n" +
             "1. PHYSICAL KEYBOARD CHORDS (BlackBerry Classic)\n" +
-            "• Alt + Backspace = Ctrl + U (kill / clear entire prompt line!)\n" +
+            "• Alt + Space or Alt + T = Tab (autocomplete commands & paths!)\n" +
+            "• Alt + Backspace = Kill word backward (or Alt+U to clear line)\n" +
             "• Shift + Backspace = Forward Delete (\033[3~, delete char ahead)\n" +
             "• Alt + C = Ctrl + C (\003, abort / cancel prompt or generation)\n" +
             "• Alt + X or Alt + E = Escape (\033, cancel prompt in agy)\n" +
             "• Alt + L = Ctrl + L (\014, clear and redraw terminal screen)\n" +
             "• Alt + D = Ctrl + D (\004, EOF / exit session)\n" +
-            "• Alt + B = Ctrl + B (\002, Tmux prefix)\n" +
+            "• Alt + B = Backward word (\033b) / Ctrl+B (Tmux prefix)\n" +
+            "• Alt + F = Forward word (\033f) / Ctrl+F\n" +
             "• Alt + M or Enter = Submit prompt (\r)\n\n" +
             "2. OPTICAL TRACKPAD & HARDWARE NAVIGATION\n" +
-            "• Roll / swipe trackpad UP/DOWN: Smoothly scrolls terminal view!\n" +
+            "• Roll trackpad UP/DOWN: Smoothly navigates text & previous/latest messages!\n" +
+            "• Roll trackpad LEFT/RIGHT: Moves cursor character by character through text.\n" +
             "• Click trackpad: Sends Enter (\r) with haptic tick.\n" +
-            "• Volume Up / Down side keys scroll terminal history directly!\n" +
+            "• Screen touch scrolling & PG▲ / PG▼: Scroll terminal output history (Page Up / Page Down).\n" +
+            "• Volume Up / Down side keys scroll terminal scrollback directly!\n" +
             "• Shift + Space = Page Up.\n\n" +
             "3. OTA SELF-UPDATER (OVER-THE-AIR)\n" +
             "• Automatically polls for new releases in background.\n" +
@@ -622,6 +639,7 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
     }
 
     private void showSelectTextDialog(String text) {
+        if (!isActivityAlive()) return;
         final EditText et = createClaudeMonospaceEditText(text, true, 12f);
 
         android.widget.ScrollView sv = new android.widget.ScrollView(this);
@@ -636,6 +654,32 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
             })
             .setNegativeButton("Close", null)
             .show();
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(android.view.KeyEvent event) {
+        int keyCode = event.getKeyCode();
+        if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP || keyCode == android.view.KeyEvent.KEYCODE_VOLUME_DOWN) {
+            android.media.AudioManager am = (android.media.AudioManager) getSystemService(Context.AUDIO_SERVICE);
+            if (am != null && am.getMode() != android.media.AudioManager.MODE_NORMAL) {
+                return super.dispatchKeyEvent(event);
+            }
+            if (event.getAction() == android.view.KeyEvent.ACTION_DOWN) {
+                if (keyCode == android.view.KeyEvent.KEYCODE_VOLUME_UP) {
+                    if (terminalBridge != null) {
+                        terminalBridge.scrollBack(5);
+                        HapticHelper.getInstance(this).performKeystrokeTick();
+                    }
+                } else {
+                    if (terminalBridge != null) {
+                        terminalBridge.scrollForward(5);
+                        HapticHelper.getInstance(this).performKeystrokeTick();
+                    }
+                }
+            }
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override
@@ -724,6 +768,9 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
             lastStatusMessage = message;
             if (ledNotificationManager != null) {
                 switch (state) {
+                    case CONNECTING:
+                        ledNotificationManager.onConnecting();
+                        break;
                     case CONNECTED:
                         ledNotificationManager.onConnected();
                         break;

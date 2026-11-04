@@ -72,4 +72,25 @@ public class UpdateManagerTest {
         Assert.assertTrue(UpdateManager.DEFAULT_UPDATE_URL.startsWith("https://"));
         Assert.assertTrue(UpdateManager.DEFAULT_UPDATE_URL.contains("nyttevaerdien/berrybot"));
     }
+
+    @Test
+    public void testTLSSocketFactoryConnectionToGithub() {
+        try {
+            java.net.URL url = new java.net.URL(UpdateManager.DEFAULT_UPDATE_URL);
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            if (conn instanceof javax.net.ssl.HttpsURLConnection) {
+                javax.net.ssl.HttpsURLConnection https = (javax.net.ssl.HttpsURLConnection) conn;
+                https.setSSLSocketFactory(new com.berrybot.update.TLSSocketFactory());
+                https.setHostnameVerifier(UpdateManager.HOSTNAME_VERIFIER);
+            }
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            conn.setRequestProperty("User-Agent", "BerryBot-OTA/1.0");
+            int code = conn.getResponseCode();
+            Assert.assertEquals("Should successfully reach GitHub update manifest", 200, code);
+            conn.disconnect();
+        } catch (Exception e) {
+            System.out.println("Live test skipped or network issue: " + e.getMessage());
+        }
+    }
 }

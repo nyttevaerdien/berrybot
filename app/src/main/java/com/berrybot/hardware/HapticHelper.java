@@ -65,6 +65,36 @@ public class HapticHelper {
         performTick(DEFAULT_TICK_MS);
     }
 
+    public void performKeystrokeTick() {
+        performTick(10);
+    }
+
+    public void performTrackpadTick() {
+        performTick(20);
+    }
+
+    public void performAlertPattern() {
+        if (!isHapticEnabled()) return;
+        try {
+            if (vibrator != null && vibrator.hasVibrator()) {
+                vibrator.vibrate(new long[]{0, 30, 60, 30}, -1);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "Vibrate alert pattern failed: " + t.getMessage());
+        }
+    }
+
+    public void performCompletionPattern() {
+        if (!isHapticEnabled()) return;
+        try {
+            if (vibrator != null && vibrator.hasVibrator()) {
+                vibrator.vibrate(new long[]{0, 50, 70, 80}, -1);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "Vibrate completion pattern failed: " + t.getMessage());
+        }
+    }
+
     public void performTick(long durationMs) {
         if (!isHapticEnabled()) return;
         try {

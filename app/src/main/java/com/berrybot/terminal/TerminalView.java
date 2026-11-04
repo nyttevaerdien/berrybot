@@ -141,12 +141,36 @@ public class TerminalView extends View {
         }
     }
 
+    private boolean visualBellActive = false;
+    private final Runnable visualBellResetRunnable = new Runnable() {
+        @Override
+        public void run() {
+            visualBellActive = false;
+            invalidate();
+        }
+    };
+
+    public void triggerVisualBell() {
+        post(new Runnable() {
+            @Override
+            public void run() {
+                visualBellActive = true;
+                invalidate();
+                removeCallbacks(visualBellResetRunnable);
+                postDelayed(visualBellResetRunnable, 100);
+            }
+        });
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         try {
             if (bridge != null) {
                 bridge.draw(canvas, getWidth(), getHeight());
+            }
+            if (visualBellActive) {
+                canvas.drawColor(0x33FFFFFF);
             }
         } catch (Throwable t) {
             Log.e(TAG, "Exception during onDraw", t);
@@ -324,42 +348,66 @@ public class TerminalView extends View {
             sendArrowRight();
             return true;
         } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == 23) {
-            if (isShift || isAlt) {
+            if (isAlt || altSticky) {
+                // Alt + Trackpad Click: Open Unified Menu
+                if (longClickListener != null) {
+                    longClickListener.onTerminalLongClick();
+                }
+                triggerTrackpadHaptic();
+            } else if (isCtrl || ctrlSticky) {
+                // Ctrl + Trackpad Click: Paste from clipboard
+                if (pasteListener != null) {
+                    pasteListener.onPasteRequested();
+                }
+                triggerTrackpadHaptic();
+            } else if (isShift) {
+                // Shift + Trackpad Click: Page Up
                 sendPageUp();
             } else {
                 bridge.sendString("\r");
-                HapticHelper.tick(getContext());
+                triggerTrackpadHaptic();
                 if (promptSubmitListener != null) {
                     promptSubmitListener.onPromptSubmitted();
                 }
             }
+            consumeModifiersAfterKey();
             return true;
         }
 
         // Hardware volume keys on the side: directly scroll history!
         if (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == 24) {
-            sendPageUp();
+            bridge.scrollBack(5);
+            triggerKeystrokeHaptic();
             return true;
         } else if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN || keyCode == 25) {
-            sendPageDown();
+            bridge.scrollForward(5);
+            triggerKeystrokeHaptic();
             return true;
         }
 
-        // Classic BlackBerry Shift+Space = Page Up
-        if ((keyCode == KeyEvent.KEYCODE_SPACE || keyCode == 62) && isShift) {
-            sendPageUp();
-            return true;
+        // Classic BlackBerry Shift+Space = Page Up; Alt+Space = Tab
+        if (keyCode == KeyEvent.KEYCODE_SPACE || keyCode == 62) {
+            if (isShift) {
+                sendPageUp();
+                return true;
+            } else if (isAlt || altSticky) {
+                sendTab();
+                triggerKeystrokeHaptic();
+                consumeModifiersAfterKey();
+                return true;
+            }
         }
 
         // Standard terminal keys
         if (keyCode == KeyEvent.KEYCODE_DEL || keyCode == 67) {
             if (isAlt || altSticky) {
-                // Alt+Backspace sends ESC + DEL (\033\u007f - kill word backward)
+                // Alt+DEL sends ESC + DEL (\033\u007f - kill word backward)
                 bridge.sendString("\033\u007f");
-                HapticHelper.tick(getContext());
+                triggerKeystrokeHaptic();
             } else if (isShift) {
-                // Shift+Backspace sends Forward Delete (ESC [ 3 ~)
+                // Shift+DEL sends Forward Delete (ESC [ 3 ~)
                 bridge.sendDelete();
+                triggerKeystrokeHaptic();
             } else {
                 // Standard Backspace sends ASCII 127 (0x7F / DEL) for Linux readline/tmux
                 bridge.sendBackspace();
@@ -374,7 +422,7 @@ public class TerminalView extends View {
             return true;
         } else if (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER || keyCode == 66) {
             bridge.sendString("\r");
-            HapticHelper.tick(getContext());
+            triggerKeystrokeHaptic();
             if (promptSubmitListener != null) {
                 promptSubmitListener.onPromptSubmitted();
             }
@@ -395,7 +443,7 @@ public class TerminalView extends View {
 
         char c = Character.toLowerCase((char) unicodeChar);
 
-        // Chords (Alt+M, Ctrl+V, etc.)
+        // Chords (Alt+M, Alt+C, Alt+Z, Alt+R, Alt+B, Alt+F, Ctrl+V, etc.)
         if (isAlt || isCtrl || altSticky || ctrlSticky) {
             boolean activeAlt = isAlt || altSticky;
             boolean activeCtrl = isCtrl || ctrlSticky;
@@ -403,7 +451,60 @@ public class TerminalView extends View {
             // Alt+C or Ctrl+C -> Ctrl+C (\003, SIGINT / abort generation)
             if (keyCode == KeyEvent.KEYCODE_C || keyCode == 31 || c == 'c') {
                 bridge.sendString("\003");
-                HapticHelper.tick(getContext());
+                triggerKeystrokeHaptic();
+                consumeModifiersAfterKey();
+                postInvalidateImmediate();
+                return true;
+            }
+
+            // Alt+Z or Ctrl+Z -> Ctrl+Z (\032, SIGTSTP / suspend process)
+            if (keyCode == KeyEvent.KEYCODE_Z || keyCode == 54 || c == 'z') {
+                bridge.sendString("\032");
+                triggerKeystrokeHaptic();
+                consumeModifiersAfterKey();
+                postInvalidateImmediate();
+                return true;
+            }
+
+            // Alt+R or Ctrl+R -> Ctrl+R (\022, Bash reverse-i-search)
+            if (keyCode == KeyEvent.KEYCODE_R || keyCode == 46 || c == 'r') {
+                bridge.sendString("\022");
+                triggerKeystrokeHaptic();
+                consumeModifiersAfterKey();
+                postInvalidateImmediate();
+                return true;
+            }
+
+            // Alt+T -> Tab (\t)
+            if (keyCode == KeyEvent.KEYCODE_T || keyCode == 48 || c == 't') {
+                if (activeAlt && !activeCtrl) {
+                    sendTab();
+                    triggerKeystrokeHaptic();
+                    consumeModifiersAfterKey();
+                    postInvalidateImmediate();
+                    return true;
+                }
+            }
+
+            // Word jump navigation: Alt+B (backward word) vs Ctrl+B (Tmux prefix)
+            if (keyCode == KeyEvent.KEYCODE_B || keyCode == 30 || c == 'b') {
+                if (activeAlt && !activeCtrl) {
+                    bridge.sendString("\033b"); // ESC + b: backward-word
+                } else {
+                    bridge.sendString("\002");  // Ctrl+B: Tmux prefix / backward-char
+                }
+                consumeModifiersAfterKey();
+                postInvalidateImmediate();
+                return true;
+            }
+
+            // Word jump navigation: Alt+F (forward word) vs Ctrl+F (forward char)
+            if (keyCode == KeyEvent.KEYCODE_F || keyCode == 34 || c == 'f') {
+                if (activeAlt && !activeCtrl) {
+                    bridge.sendString("\033f"); // ESC + f: forward-word
+                } else {
+                    bridge.sendString("\006");  // Ctrl+F: forward-char
+                }
                 consumeModifiersAfterKey();
                 postInvalidateImmediate();
                 return true;
@@ -412,7 +513,7 @@ public class TerminalView extends View {
             // Alt+U or Ctrl+U -> Ctrl+U (\025, Kill entire input line)
             if (keyCode == KeyEvent.KEYCODE_U || keyCode == 49 || c == 'u') {
                 bridge.sendString("\025");
-                HapticHelper.tick(getContext());
+                triggerKeystrokeHaptic();
                 consumeModifiersAfterKey();
                 postInvalidateImmediate();
                 return true;
@@ -422,7 +523,7 @@ public class TerminalView extends View {
             if (keyCode == KeyEvent.KEYCODE_X || keyCode == 52 || c == 'x' ||
                 keyCode == KeyEvent.KEYCODE_E || keyCode == 33 || c == 'e') {
                 bridge.sendEscape();
-                HapticHelper.tick(getContext());
+                triggerKeystrokeHaptic();
                 consumeModifiersAfterKey();
                 postInvalidateImmediate();
                 return true;
@@ -444,18 +545,10 @@ public class TerminalView extends View {
                 return true;
             }
 
-            // Alt+B or Ctrl+B -> Ctrl+B (\002, Tmux prefix)
-            if (keyCode == KeyEvent.KEYCODE_B || keyCode == 30 || c == 'b') {
-                bridge.sendString("\002");
-                consumeModifiersAfterKey();
-                postInvalidateImmediate();
-                return true;
-            }
-
             // Alt+M or Ctrl+M -> Carriage Return (\r, Enter / submit)
             if (keyCode == KeyEvent.KEYCODE_M || keyCode == 41 || c == 'm') {
                 bridge.sendString("\r");
-                HapticHelper.tick(getContext());
+                triggerTrackpadHaptic();
                 if (promptSubmitListener != null) {
                     promptSubmitListener.onPromptSubmitted();
                 }
@@ -484,7 +577,7 @@ public class TerminalView extends View {
             }
             if (c == '\r' || c == '\n') {
                 bridge.sendString("\r");
-                HapticHelper.tick(getContext());
+                triggerTrackpadHaptic();
                 if (promptSubmitListener != null) {
                     promptSubmitListener.onPromptSubmitted();
                 }
@@ -497,7 +590,13 @@ public class TerminalView extends View {
             } else if (isAlt || altSticky) {
                 // Alt sends Escape prefix
                 bridge.sendEscape();
-                bridge.sendString(String.valueOf((char) unicodeChar));
+                if (unicodeChar <= 0x7F) {
+                    bridge.sendByte((byte) unicodeChar);
+                } else {
+                    bridge.sendString(String.valueOf((char) unicodeChar));
+                }
+            } else if (unicodeChar <= 0x7F) {
+                bridge.sendByte((byte) unicodeChar);
             } else {
                 bridge.sendString(String.valueOf((char) unicodeChar));
             }
@@ -539,7 +638,7 @@ public class TerminalView extends View {
                     if (bridge != null) {
                         bridge.sendString("\033\u007f"); // Kill word backward
                     }
-                    HapticHelper.tick(getContext());
+                    triggerKeystrokeHaptic();
                 } else if (isShift) {
                     sendDelete();
                 } else {
@@ -547,6 +646,12 @@ public class TerminalView extends View {
                 }
                 consumeModifiersAfterKey();
                 postInvalidateImmediate();
+                return true;
+            }
+
+            if (keyCode == KeyEvent.KEYCODE_TAB || keyCode == 61) {
+                sendTab();
+                triggerKeystrokeHaptic();
                 return true;
             }
 
@@ -559,18 +664,42 @@ public class TerminalView extends View {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            int keyCode = event.getKeyCode();
-            boolean isAlt = isAltActive(event);
-            boolean isCtrl = isCtrlActive(event);
-            if (keyCode == KeyEvent.KEYCODE_DEL || keyCode == 67 
-                    || keyCode == KeyEvent.KEYCODE_FORWARD_DEL || keyCode == 112
-                    || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER || keyCode == 66
-                    || isAlt || isCtrl) {
+        int keyCode = event.getKeyCode();
+        boolean isAlt = isAltActive(event);
+        boolean isCtrl = isCtrlActive(event);
+
+        boolean isTerminalKey = keyCode == KeyEvent.KEYCODE_DEL || keyCode == 67 
+                || keyCode == KeyEvent.KEYCODE_FORWARD_DEL || keyCode == 112
+                || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER || keyCode == 66
+                || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                || keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == 23
+                || keyCode == KeyEvent.KEYCODE_TAB || keyCode == KeyEvent.KEYCODE_ESCAPE
+                || isAlt || isCtrl;
+
+        if (isTerminalKey) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN) {
                 return onKeyDown(keyCode, event);
+            } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                return onKeyUp(keyCode, event);
             }
         }
         return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_ALT_LEFT || keyCode == KeyEvent.KEYCODE_ALT_RIGHT
+                || keyCode == KeyEvent.KEYCODE_SHIFT_LEFT || keyCode == KeyEvent.KEYCODE_SHIFT_RIGHT) {
+            return true;
+        }
+        if (keyCode == KeyEvent.KEYCODE_DEL || keyCode == KeyEvent.KEYCODE_ENTER
+                || keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_DPAD_UP
+                || keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            return true;
+        }
+        return super.onKeyUp(keyCode, event);
     }
 
     @Override
@@ -616,6 +745,22 @@ public class TerminalView extends View {
         notifyModifiers();
     }
 
+    private void triggerKeystrokeHaptic() {
+        Context ctx = getContext();
+        if (ctx != null) {
+            HapticHelper h = HapticHelper.getInstance(ctx);
+            if (h != null) h.performKeystrokeTick();
+        }
+    }
+
+    private void triggerTrackpadHaptic() {
+        Context ctx = getContext();
+        if (ctx != null) {
+            HapticHelper h = HapticHelper.getInstance(ctx);
+            if (h != null) h.performTrackpadTick();
+        }
+    }
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (bridge == null) return super.onKeyDown(keyCode, event);
@@ -634,40 +779,84 @@ public class TerminalView extends View {
         return super.onKeyDown(keyCode, event);
     }
 
+    private float trackballAccumulatorX = 0f;
+    private float trackballAccumulatorY = 0f;
+    private static final float TRACKBALL_STEP_THRESHOLD = 0.20f;
+
     @Override
     public boolean onTrackballEvent(MotionEvent event) {
         if (bridge == null) return super.onTrackballEvent(event);
+
         if (event.getAction() == MotionEvent.ACTION_MOVE) {
-            float y = event.getY();
-            if (y < -0.15f) {
-                // Scrolling UP on optical trackpad scrolls terminal content UP (scrollback history)
-                sendPageUp();
-                return true;
-            } else if (y > 0.15f) {
-                // Scrolling DOWN on optical trackpad scrolls terminal content DOWN
-                sendPageDown();
-                return true;
+            boolean isShift = (event.getMetaState() & KeyEvent.META_SHIFT_ON) != 0;
+            boolean isAlt = altSticky || (event.getMetaState() & KeyEvent.META_ALT_ON) != 0;
+
+            trackballAccumulatorY += event.getY();
+            trackballAccumulatorX += event.getX();
+
+            while (trackballAccumulatorY <= -TRACKBALL_STEP_THRESHOLD) {
+                if (isShift || isAlt) {
+                    sendPageUp();
+                } else {
+                    sendArrowUp();
+                }
+                triggerKeystrokeHaptic();
+                trackballAccumulatorY += TRACKBALL_STEP_THRESHOLD;
             }
-            float x = event.getX();
-            if (x < -0.2f) {
+            while (trackballAccumulatorY >= TRACKBALL_STEP_THRESHOLD) {
+                if (isShift || isAlt) {
+                    sendPageDown();
+                } else {
+                    sendArrowDown();
+                }
+                triggerKeystrokeHaptic();
+                trackballAccumulatorY -= TRACKBALL_STEP_THRESHOLD;
+            }
+
+            while (trackballAccumulatorX <= -TRACKBALL_STEP_THRESHOLD) {
                 sendArrowLeft();
-                return true;
-            } else if (x > 0.2f) {
+                triggerKeystrokeHaptic();
+                trackballAccumulatorX += TRACKBALL_STEP_THRESHOLD;
+            }
+            while (trackballAccumulatorX >= TRACKBALL_STEP_THRESHOLD) {
                 sendArrowRight();
-                return true;
+                triggerKeystrokeHaptic();
+                trackballAccumulatorX -= TRACKBALL_STEP_THRESHOLD;
             }
             return true;
         } else if (event.getAction() == MotionEvent.ACTION_DOWN) {
-            // Trackball center click sends Enter (\r)
-            bridge.sendString("\r");
-            HapticHelper.tick(getContext());
-            if (promptSubmitListener != null) {
-                promptSubmitListener.onPromptSubmitted();
+            boolean isAlt = altSticky || (event.getMetaState() & KeyEvent.META_ALT_ON) != 0;
+            boolean isCtrl = ctrlSticky;
+
+            if (isAlt) {
+                if (longClickListener != null) {
+                    longClickListener.onTerminalLongClick();
+                }
+                triggerTrackpadHaptic();
+            } else if (isCtrl) {
+                if (pasteListener != null) {
+                    pasteListener.onPasteRequested();
+                }
+                triggerTrackpadHaptic();
+            } else {
+                bridge.sendString("\r");
+                triggerTrackpadHaptic();
+                if (promptSubmitListener != null) {
+                    promptSubmitListener.onPromptSubmitted();
+                }
             }
             postInvalidateImmediate();
             return true;
         }
         return super.onTrackballEvent(event);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        redrawHandler.removeCallbacks(redrawRunnable);
+        redrawScheduled = false;
+        removeCallbacks(visualBellResetRunnable);
+        super.onDetachedFromWindow();
     }
 
     @Override

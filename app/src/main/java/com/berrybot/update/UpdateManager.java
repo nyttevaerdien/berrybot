@@ -43,10 +43,38 @@ public class UpdateManager {
     public static final String DEFAULT_UPDATE_URL = 
             "https://raw.githubusercontent.com/nyttevaerdien/berrybot/master/version.json";
 
+    public static final javax.net.ssl.HostnameVerifier HOSTNAME_VERIFIER = new javax.net.ssl.HostnameVerifier() {
+        @Override
+        public boolean verify(String hostname, javax.net.ssl.SSLSession session) {
+            if (hostname == null) return false;
+            String lower = hostname.toLowerCase(java.util.Locale.US);
+            if (lower.endsWith(".githubusercontent.com") 
+                    || lower.endsWith(".github.com") 
+                    || lower.endsWith(".github.io")
+                    || lower.equals("github.com")
+                    || lower.equals("raw.githubusercontent.com")
+                    || lower.equals("objects.githubusercontent.com")) {
+                return true;
+            }
+            try {
+                return javax.net.ssl.HttpsURLConnection.getDefaultHostnameVerifier().verify(hostname, session);
+            } catch (Throwable t) {
+                return false;
+            }
+        }
+    };
+
     private static volatile UpdateManager instance;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private volatile String lastFetchError = null;
 
     private UpdateManager() {}
+
+    public static boolean isActivityAlive(Activity activity) {
+        if (activity == null || activity.isFinishing()) return false;
+        if (android.os.Build.VERSION.SDK_INT >= 17 && activity.isDestroyed()) return false;
+        return true;
+    }
 
     public static UpdateManager getInstance() {
         if (instance == null) {
@@ -93,7 +121,7 @@ public class UpdateManager {
      * Check for updates on a background thread.
      */
     public void checkForUpdates(final Activity activity, final boolean userInitiated) {
-        if (activity == null || activity.isFinishing()) return;
+        if (!isActivityAlive(activity)) return;
 
         if (userInitiated) {
             Toast.makeText(activity, "Checking for updates…", Toast.LENGTH_SHORT).show();
@@ -109,15 +137,17 @@ public class UpdateManager {
 
     private void checkInternal(final Activity activity, final boolean userInitiated) {
         String configuredUrl = getUpdateManifestUrl(activity);
+        lastFetchError = null;
         String json = fetchUrlWithRedirects(configuredUrl, 0);
 
         if (json == null || json.length() == 0) {
             if (userInitiated) {
+                final String errDetail = lastFetchError;
                 mainHandler.post(new Runnable() {
                     @Override
                     public void run() {
-                        if (activity.isFinishing()) return;
-                        showUnreachableDialog(activity);
+                        if (!isActivityAlive(activity)) return;
+                        showUnreachableDialog(activity, errDetail);
                     }
                 });
             }
@@ -145,7 +175,7 @@ public class UpdateManager {
             mainHandler.post(new Runnable() {
                 @Override
                 public void run() {
-                    if (activity.isFinishing()) return;
+                    if (!isActivityAlive(activity)) return;
                     if (remoteVersionCode > currentCode && apkUrl.length() > 0) {
                         showUpdateDialog(activity, remoteVersionName, remoteVersionCode, apkUrl, changelog);
                     } else if (userInitiated) {
@@ -162,6 +192,7 @@ public class UpdateManager {
     }
 
     private void showUpdateDialog(final Activity activity, final String newVersionName, final int newVersionCode, final String apkUrl, final String changelog) {
+        if (!isActivityAlive(activity)) return;
         new AlertDialog.Builder(activity)
             .setTitle("BerryBot Update Available (v" + newVersionName + ")")
             .setMessage("A new version of BerryBot is available!\n\n" + 
@@ -185,10 +216,12 @@ public class UpdateManager {
             .show();
     }
 
-    private void showUnreachableDialog(final Activity activity) {
+    private void showUnreachableDialog(final Activity activity, String errorReason) {
+        if (!isActivityAlive(activity)) return;
+        String errDetail = (errorReason != null && errorReason.length() > 0) ? ("\nReason: " + errorReason + "\n\n") : "\n\n";
         new AlertDialog.Builder(activity)
             .setTitle("Update Check Failed")
-            .setMessage("Could not connect to update manifest server.\n\n" +
+            .setMessage("Could not connect to update manifest server." + errDetail +
                         "Endpoint:\n" + getUpdateManifestUrl(activity) + "\n\n" +
                         "Would you like to edit the update server URL?")
             .setPositiveButton("Edit URL", new DialogInterface.OnClickListener() {
@@ -202,6 +235,7 @@ public class UpdateManager {
     }
 
     public void showConfigureUrlDialog(final Activity activity) {
+        if (!isActivityAlive(activity)) return;
         final EditText input = new EditText(activity);
         input.setText(getUpdateManifestUrl(activity));
         input.setSingleLine(true);
@@ -236,6 +270,7 @@ public class UpdateManager {
     }
 
     private void startDownloadAndInstall(final Activity activity, final String apkUrl, final String versionName) {
+        if (!isActivityAlive(activity)) return;
         final ProgressDialog progress = new ProgressDialog(activity);
         progress.setTitle("Downloading Update");
         progress.setMessage("Downloading BerryBot v" + versionName + "…");
@@ -269,26 +304,35 @@ public class UpdateManager {
                         throw new Exception("HTTP response: " + responseCode + " (" + conn.getResponseMessage() + ")");
                     }
 
-                    int fileLength = conn.getContentLength();
+                    final int fileLength = conn.getContentLength();
                     in = conn.getInputStream();
                     out = new FileOutputStream(apkFile);
 
                     byte[] data = new byte[8192];
                     long total = 0;
                     int count;
+                    long lastProgressPost = 0;
+                    int lastPercent = -1;
 
                     while ((count = in.read(data)) != -1) {
                         total += count;
                         if (fileLength > 0) {
                             final int progressPercent = (int) (total * 100 / fileLength);
-                            mainHandler.post(new Runnable() {
-                                @Override
-                                public void run() {
-                                    if (progress.isShowing()) {
-                                        progress.setProgress(progressPercent);
+                            long now = android.os.SystemClock.uptimeMillis();
+                            if (progressPercent != lastPercent && (now - lastProgressPost >= 200 || progressPercent >= 100)) {
+                                lastProgressPost = now;
+                                lastPercent = progressPercent;
+                                mainHandler.post(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        try {
+                                            if (progress.isShowing() && isActivityAlive(activity)) {
+                                                progress.setProgress(progressPercent);
+                                            }
+                                        } catch (Throwable ignored) {}
                                     }
-                                }
-                            });
+                                });
+                            }
                         }
                         out.write(data, 0, count);
                     }
@@ -300,8 +344,12 @@ public class UpdateManager {
                     mainHandler.post(new Runnable() {
                         @Override
                         public void run() {
-                            if (progress.isShowing()) progress.dismiss();
-                            Toast.makeText(activity, "Download failed: " + t.getMessage(), Toast.LENGTH_LONG).show();
+                            try {
+                                if (progress.isShowing()) progress.dismiss();
+                            } catch (Throwable ignored) {}
+                            if (isActivityAlive(activity)) {
+                                Toast.makeText(activity, "Download failed: " + t.getMessage(), Toast.LENGTH_LONG).show();
+                            }
                         }
                     });
                 } finally {
@@ -315,8 +363,12 @@ public class UpdateManager {
                     mainHandler.post(new Runnable() {
                         @Override
                         public void run() {
-                            if (progress.isShowing()) progress.dismiss();
-                            launchPackageInstaller(activity, finalFile);
+                            try {
+                                if (progress.isShowing()) progress.dismiss();
+                            } catch (Throwable ignored) {}
+                            if (isActivityAlive(activity)) {
+                                launchPackageInstaller(activity, finalFile);
+                            }
                         }
                     });
                 }
@@ -332,7 +384,9 @@ public class UpdateManager {
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         if (conn instanceof javax.net.ssl.HttpsURLConnection) {
             try {
-                ((javax.net.ssl.HttpsURLConnection) conn).setSSLSocketFactory(new TLSSocketFactory());
+                javax.net.ssl.HttpsURLConnection httpsConn = (javax.net.ssl.HttpsURLConnection) conn;
+                httpsConn.setSSLSocketFactory(new TLSSocketFactory());
+                httpsConn.setHostnameVerifier(HOSTNAME_VERIFIER);
             } catch (Throwable t) {
                 Log.w(TAG, "Failed to apply TLSSocketFactory: " + t.getMessage());
             }
@@ -392,13 +446,15 @@ public class UpdateManager {
             conn = (HttpURLConnection) url.openConnection();
             if (conn instanceof javax.net.ssl.HttpsURLConnection) {
                 try {
-                    ((javax.net.ssl.HttpsURLConnection) conn).setSSLSocketFactory(new TLSSocketFactory());
+                    javax.net.ssl.HttpsURLConnection httpsConn = (javax.net.ssl.HttpsURLConnection) conn;
+                    httpsConn.setSSLSocketFactory(new TLSSocketFactory());
+                    httpsConn.setHostnameVerifier(HOSTNAME_VERIFIER);
                 } catch (Throwable t) {
                     Log.w(TAG, "Failed to apply TLSSocketFactory: " + t.getMessage());
                 }
             }
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(12000);
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(25000);
             conn.setInstanceFollowRedirects(false);
             conn.setRequestProperty("User-Agent", "BerryBot-OTA/1.0");
 
@@ -416,10 +472,12 @@ public class UpdateManager {
                     }
                     return fetchUrlWithRedirects(location, redirectCount + 1);
                 }
+                lastFetchError = "Redirect missing location header";
                 return null;
             }
 
             if (code != HttpURLConnection.HTTP_OK) {
+                lastFetchError = "HTTP " + code + " " + conn.getResponseMessage();
                 return null;
             }
 
@@ -431,6 +489,8 @@ public class UpdateManager {
             }
             return sb.toString().trim();
         } catch (Throwable t) {
+            Log.w(TAG, "Failed to fetch update URL: " + t.getMessage(), t);
+            lastFetchError = t.getClass().getSimpleName() + ": " + t.getMessage();
             return null;
         } finally {
             try { if (reader != null) reader.close(); } catch (Exception ignored) {}

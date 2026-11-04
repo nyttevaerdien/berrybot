@@ -36,8 +36,8 @@ public class KeyStorage {
     private static KeyStorage sInstance;
 
     public static synchronized KeyStorage getInstance(Context context) {
-        if (sInstance == null) {
-            sInstance = new KeyStorage(context != null ? context.getApplicationContext() : null);
+        if (sInstance == null && context != null) {
+            sInstance = new KeyStorage(context.getApplicationContext());
         }
         return sInstance;
     }
@@ -78,8 +78,8 @@ public class KeyStorage {
                 return seed;
             }
         }
-        // Fallback for standard 48-byte or 49-byte Ed25519 PKCS#8
-        if (bytes.length >= 48) {
+        // Fallback strictly for standard 48-byte, 49-byte, or 83-85-byte Ed25519 PKCS#8 DER
+        if (bytes.length == 48 || bytes.length == 49 || (bytes.length >= 83 && bytes.length <= 85)) {
             byte[] seed = new byte[32];
             System.arraycopy(bytes, bytes.length - 32, seed, 0, 32);
             return seed;
@@ -112,7 +112,18 @@ public class KeyStorage {
         return currentKeyPair;
     }
 
+    public static void destroyKeyPair(KeyPair kp) {
+        if (kp == null) return;
+        try {
+            if (kp.getPrivate() instanceof Ed25519PrivateKey) {
+                ((Ed25519PrivateKey) kp.getPrivate()).destroy();
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
     public synchronized void reload() {
+        destroyKeyPair(currentKeyPair);
         currentKeyPair = null;
         loadOrGenerateKey();
     }
@@ -200,9 +211,8 @@ public class KeyStorage {
         try {
             KeyPair kp = createEd25519KeyPairFromSeed(seed);
             if (kp != null && kp.getPrivate() != null) {
-                String normalized = phrase.trim().replaceAll("\\s+", " ").toLowerCase();
                 prefs.edit()
-                        .putString(KEY_PASSPHRASE, normalized)
+                        .remove(KEY_PASSPHRASE)
                         .remove(KEY_RAW_PEM)
                         .commit();
                 saveKeyPair(kp, nickname != null ? nickname : "berrybot@classic", null);
@@ -216,7 +226,7 @@ public class KeyStorage {
     }
 
     public synchronized String getSavedPassphrase() {
-        return prefs.getString(KEY_PASSPHRASE, null);
+        return null;
     }
 
     public synchronized boolean importPrivateKey(String keyData, String password, String nickname) {
@@ -341,6 +351,25 @@ public class KeyStorage {
                     currentKeyPair = createEd25519KeyPairFromSeed(seed);
                     if (currentKeyPair != null) return;
                 }
+                // Fallback to RSA or EC PKCS#8 decode if not Ed25519
+                PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(privBytes);
+                try {
+                    KeyFactory rsaKf = KeyFactory.getInstance("RSA");
+                    PrivateKey priv = rsaKf.generatePrivate(spec);
+                    if (priv instanceof RSAPrivateCrtKey) {
+                        RSAPrivateCrtKey crt = (RSAPrivateCrtKey) priv;
+                        RSAPublicKeySpec pubSpec = new RSAPublicKeySpec(crt.getModulus(), crt.getPublicExponent());
+                        currentKeyPair = new KeyPair(rsaKf.generatePublic(pubSpec), priv);
+                        return;
+                    }
+                } catch (Exception ignoredRsa) {
+                    try {
+                        KeyFactory ecKf = KeyFactory.getInstance("EC");
+                        currentKeyPair = new KeyPair(null, ecKf.generatePrivate(spec));
+                        return;
+                    } catch (Exception ignoredEc) {
+                    }
+                }
             } catch (Exception e) {
                 Log.w(TAG, "Failed to restore key from preferences, regenerating...", e);
             } finally {
@@ -354,6 +383,9 @@ public class KeyStorage {
     }
 
     private void saveKeyPair(KeyPair kp, String nickname, String rawPem) {
+        if (this.currentKeyPair != null && this.currentKeyPair != kp) {
+            destroyKeyPair(this.currentKeyPair);
+        }
         SharedPreferences.Editor editor = prefs.edit();
         if (kp.getPrivate() != null) {
             byte[] privEncoded = kp.getPrivate().getEncoded();

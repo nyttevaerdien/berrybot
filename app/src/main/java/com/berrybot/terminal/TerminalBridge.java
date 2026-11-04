@@ -20,6 +20,7 @@ import de.mud.terminal.vt320;
 public class TerminalBridge {
     private static final String TAG = "BerryBot.TerminalBridge";
     private static final int BUFFER_SIZE = 16384;
+    private static final Charset UTF8 = Charset.forName("UTF-8");
 
     private final Context context;
     private vt320 buffer;
@@ -95,8 +96,18 @@ public class TerminalBridge {
         recomputeFontMetrics();
     }
 
+    public interface TitleListener {
+        void onTitleChanged(String title);
+    }
+    private TitleListener titleListener;
+
+    public void setTitleListener(TitleListener listener) {
+        this.titleListener = listener;
+    }
+
     private void recomputeFontMetrics() {
         if (textPaint == null) return;
+        textPaint.setTextScaleX(1.0f);
         textPaint.setTextSize(fontSize);
         float[] widths = new float[1];
         try {
@@ -148,7 +159,31 @@ public class TerminalBridge {
 
             @Override
             public void debug(String s) {
-                if (s != null) Log.d(TAG, s);
+                // No-op in release to prevent JNI logcat IPC overhead and String allocations
+            }
+
+            @Override
+            public void beep() {
+                if (context != null) {
+                    com.berrybot.hardware.HapticHelper.getInstance(context).performAlertPattern();
+                }
+                if (terminalView != null) {
+                    terminalView.triggerVisualBell();
+                }
+            }
+
+            @Override
+            public void setTitle(String title) {
+                if (titleListener != null) {
+                    titleListener.onTitleChanged(title);
+                }
+            }
+
+            @Override
+            public void triggerNotification(String title, String message) {
+                if (context != null) {
+                    com.berrybot.hardware.LedNotificationManager.getInstance(context).sendAgentPushNotification(title, message);
+                }
             }
         };
 
@@ -261,16 +296,24 @@ public class TerminalBridge {
 
             if (buffer == null) return;
 
-            int curCols = buffer.getColumns();
-            int curRows = buffer.getRows();
-            if (curCols <= 0 || curRows <= 0) return;
+            int curCols;
+            int curRows;
+            int absBase;
+            char[][] charArr;
+            long[][] attrArr;
+
+            synchronized (buffer) {
+                curCols = buffer.getColumns();
+                curRows = buffer.getRows();
+                if (curCols <= 0 || curRows <= 0) return;
+
+                absBase = buffer.windowBase;
+                charArr = buffer.charArray;
+                attrArr = buffer.charAttributes;
+                if (charArr == null || attrArr == null) return;
+            }
 
             ensureLineCharBuf(curCols);
-
-            int absBase = buffer.screenBase;
-            char[][] charArr = buffer.charArray;
-            long[][] attrArr = buffer.charAttributes;
-            if (charArr == null || attrArr == null) return;
 
             int lastFg = -1;
             boolean lastBold = false;
@@ -301,7 +344,8 @@ public class TerminalBridge {
 
                     if (bgColor != ClaudeTheme.BG_COLOR) {
                         bgPaint.setColor(bgColor);
-                        canvas.drawRect(runStart * charWidth, y, col * charWidth, y + charHeight, bgPaint);
+                        int rightX = (col == rowCols) ? Math.max(col * charWidth, viewWidth) : col * charWidth;
+                        canvas.drawRect(runStart * charWidth, y, rightX, y + charHeight, bgPaint);
                     }
                 }
 
@@ -376,19 +420,24 @@ public class TerminalBridge {
                 if (cursorCol >= 0 && cursorCol < curCols && cursorRow >= 0 && cursorRow < curRows) {
                     int cx = cursorCol * charWidth;
                     int cy = cursorRow * charHeight;
-                    canvas.drawRect(cx, cy, cx + charWidth, cy + charHeight, cursorPaint);
-
-                    // Draw char under cursor with inverted color
-                    char c = buffer.getChar(cursorCol, cursorRow);
-                    if (c != 0 && c != ' ') {
-                        cursorCharBuf[0] = c;
-                        textPaint.setColor(ClaudeTheme.BG_COLOR);
-                        textPaint.setFakeBoldText(false);
-                        textPaint.setUnderlineText(false);
-                        canvas.drawText(cursorCharBuf, 0, 1, cx, cy + charAscent, textPaint);
-                        lastFg = ClaudeTheme.BG_COLOR;
-                        lastBold = false;
-                        lastUnderline = false;
+                    int style = buffer.getCursorStyle();
+                    if (style == 3 || style == 4) { // Underline cursor
+                        canvas.drawRect(cx, cy + charHeight - 3, cx + charWidth, cy + charHeight, cursorPaint);
+                    } else if (style == 5 || style == 6) { // Bar / Beam cursor
+                        canvas.drawRect(cx, cy, cx + 2, cy + charHeight, cursorPaint);
+                    } else { // Block cursor
+                        canvas.drawRect(cx, cy, cx + charWidth, cy + charHeight, cursorPaint);
+                        char c = buffer.getChar(cursorCol, cursorRow);
+                        if (c != 0 && c != ' ' && !Character.isSurrogate(c)) {
+                            cursorCharBuf[0] = c;
+                            textPaint.setColor(ClaudeTheme.BG_COLOR);
+                            textPaint.setFakeBoldText(false);
+                            textPaint.setUnderlineText(false);
+                            canvas.drawText(cursorCharBuf, 0, 1, cx, cy + charAscent, textPaint);
+                            lastFg = ClaudeTheme.BG_COLOR;
+                            lastBold = false;
+                            lastUnderline = false;
+                        }
                     }
                 }
             }
@@ -412,18 +461,32 @@ public class TerminalBridge {
     }
 
     private int extractFgColor(long attr) {
+        int color;
         if ((attr & VDUBuffer.COLOR_FG) != 0) {
             int fg = (int) ((attr & VDUBuffer.COLOR_FG) >> VDUBuffer.COLOR_FG_SHIFT) - 1;
             if (fg >= 0 && fg < 256) {
                 if (fg < 8 && (attr & VDUBuffer.BOLD) != 0) {
-                    return ClaudeTheme.PALETTE[fg + 8];
+                    color = ClaudeTheme.PALETTE[fg + 8];
+                } else {
+                    color = ClaudeTheme.PALETTE[fg];
                 }
-                return ClaudeTheme.PALETTE[fg];
             } else if (fg >= 256) {
-                return 0xFF000000 | (fg - 256);
+                color = 0xFF000000 | (fg - 256);
+            } else {
+                color = (attr & VDUBuffer.BOLD) != 0 ? ClaudeTheme.PALETTE[15] : ClaudeTheme.FG_COLOR;
             }
+        } else {
+            color = (attr & VDUBuffer.BOLD) != 0 ? ClaudeTheme.PALETTE[15] : ClaudeTheme.FG_COLOR;
         }
-        return (attr & VDUBuffer.BOLD) != 0 ? ClaudeTheme.PALETTE[15] : ClaudeTheme.FG_COLOR;
+
+        if ((attr & VDUBuffer.LOW) != 0) {
+            // Apply 50% luminance dimming for faint text
+            int r = (((color >> 16) & 0xFF) * 5) / 9;
+            int g = (((color >> 8) & 0xFF) * 5) / 9;
+            int b = ((color & 0xFF) * 5) / 9;
+            return 0xFF000000 | (r << 16) | (g << 8) | b;
+        }
+        return color;
     }
 
     private int extractBgColor(long attr) {
@@ -446,7 +509,42 @@ public class TerminalBridge {
 
     public synchronized void sendString(String s) {
         if (connectionManager != null && s != null) {
-            connectionManager.sendData(s.getBytes(Charset.forName("UTF-8")));
+            connectionManager.sendData(s.getBytes(UTF8));
+        }
+    }
+
+    public synchronized void sendByte(int b) {
+        if (connectionManager != null) {
+            connectionManager.sendByte(b);
+        }
+    }
+
+    public synchronized void scrollBack(int lines) {
+        if (buffer != null) {
+            int current = buffer.getWindowBase();
+            buffer.setWindowBase(Math.max(0, current - lines));
+            if (terminalView != null) {
+                terminalView.requestCoalescedRedraw();
+            }
+        }
+    }
+
+    public synchronized void scrollForward(int lines) {
+        if (buffer != null) {
+            int current = buffer.getWindowBase();
+            buffer.setWindowBase(Math.min(buffer.screenBase, current + lines));
+            if (terminalView != null) {
+                terminalView.requestCoalescedRedraw();
+            }
+        }
+    }
+
+    public synchronized void resetScrollback() {
+        if (buffer != null) {
+            buffer.setWindowBase(buffer.screenBase);
+            if (terminalView != null) {
+                terminalView.requestCoalescedRedraw();
+            }
         }
     }
 
@@ -522,9 +620,7 @@ public class TerminalBridge {
     }
 
     public synchronized void sendTab() {
-        if (connectionManager != null) {
-            connectionManager.sendByte(0x09);
-        }
+        sendString("\t");
     }
 
     public synchronized void sendCtrlChar(char c) {

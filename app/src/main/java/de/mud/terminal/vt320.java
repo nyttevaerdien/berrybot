@@ -86,7 +86,7 @@ public abstract class vt320 extends VDUBuffer implements VDUInput {
    * @param start place to start in array
    * @param len number of characters to process
    */
-  public void putString(char[] s, byte[] fullwidths, int start, int len) {
+  public synchronized void putString(char[] s, byte[] fullwidths, int start, int len) {
     if (len > 0) {
       //markLine(R, 1);
       int lastChar = -1;
@@ -718,6 +718,7 @@ public void setScreenSize(int c, int r, boolean broadcast) {
   private final static int TSTATE_CSI_TICKS = 16;
   private final static int TSTATE_CSI_EQUAL = 17; /* ESC [ = */
   private final static int TSTATE_TITLE = 18; /* xterm title */
+  private final static int TSTATE_CSI_SPACE = 19; /* ESC [ SP */
 
   /* Keys we support */
   public final static int KEY_PAUSE = 1;
@@ -1276,6 +1277,31 @@ public void setScreenSize(int c, int r, boolean broadcast) {
   }
 
   private void handle_osc(String osc) {
+    if (osc == null || osc.length() == 0) return;
+
+    if (osc.startsWith("0;") || osc.startsWith("2;")) {
+      setTitle(osc.substring(2));
+      return;
+    }
+
+    if (osc.startsWith("9;")) {
+      // iTerm2 / Windows Terminal / modern terminal notification sequence
+      triggerNotification("BerryBot • Antigravity", osc.substring(2));
+      return;
+    }
+
+    if (osc.startsWith("777;notify;")) {
+      // rxvt-unicode / foot terminal notification sequence
+      String rest = osc.substring(11);
+      int semi = rest.indexOf(';');
+      if (semi != -1) {
+        triggerNotification(rest.substring(0, semi), rest.substring(semi + 1));
+      } else {
+        triggerNotification("BerryBot", rest);
+      }
+      return;
+    }
+
 	  if (osc.length() > 2 && osc.substring(0, 2).equals("4;")) {
 			// Define color palette
 			String[] colorData = osc.split(";");
@@ -1283,7 +1309,7 @@ public void setScreenSize(int c, int r, boolean broadcast) {
 			try {
 				int colorIndex = Integer.parseInt(colorData[1]);
 
-				if ("rgb:".equals(colorData[2].substring(0, 4))) {
+				if (colorData.length > 2 && colorData[2].length() >= 4 && "rgb:".equals(colorData[2].substring(0, 4))) {
 					String[] rgb = colorData[2].substring(4).split("/", -1);
 
 					int red = Integer.parseInt(rgb[0].substring(0, 2), 16) & 0xFF;
@@ -1294,13 +1320,24 @@ public void setScreenSize(int c, int r, boolean broadcast) {
 					}
 				}
 			} catch (Exception e) {
-				debugStr.append("OSC: invalid color sequence encountered: ")
-				  .append(osc);
-				debug(debugStr.toString());
-				debugStr.setLength(0);
+				if (debug > 0) {
+					debugStr.append("OSC: invalid color sequence encountered: ")
+					  .append(osc);
+					debug(debugStr.toString());
+					debugStr.setLength(0);
+				}
 			}
-		} else
+		} else if (debug > 0) {
 			debug("OSC: " + osc);
+		}
+  }
+
+  public void setTitle(String title) {
+    /* Overridden by TerminalBridge */
+  }
+
+  public void triggerNotification(String title, String message) {
+    /* Overridden by TerminalBridge */
   }
 
   private final static char unimap[] = {
@@ -2302,6 +2339,11 @@ public void setScreenSize(int c, int r, boolean broadcast) {
                 case 1003:
                   mouserpt = DCEvars[i];
                   break;
+                case 47:
+                case 1047:
+                case 1049:
+                  setAlternateBuffer(true);
+                  break;
 
                   /* unimplemented stuff, fall through */
                   /* 4  - scrolling mode, smooth */
@@ -2375,6 +2417,11 @@ public void setScreenSize(int c, int r, boolean broadcast) {
                 case 1002:
                 case 1003:
                   mouserpt = 0;
+                  break;
+                case 47:
+                case 1047:
+                case 1049:
+                  setAlternateBuffer(false);
                   break;
                 default:
                   debug("ESC [ ? " + DCEvars[0] + " l, unsupported.");
@@ -2521,6 +2568,9 @@ public void setScreenSize(int c, int r, boolean broadcast) {
       case TSTATE_CSI:
         term_state = TSTATE_DATA;
         switch (c) {
+          case ' ':
+            term_state = TSTATE_CSI_SPACE;
+            break;
           case '"':
             term_state = TSTATE_CSI_TICKS;
             break;
@@ -2982,7 +3032,7 @@ public void setScreenSize(int c, int r, boolean broadcast) {
                   attributes &= ~UNDERLINE;
                   break;
                 case 22:
-                  attributes &= ~BOLD;
+                  attributes &= ~(BOLD | LOW);
                   break;
                 case 30:
                 case 31:
@@ -3105,6 +3155,13 @@ public void setScreenSize(int c, int r, boolean broadcast) {
           default:
             // TODO save title
             break;
+        }
+        break;
+      case TSTATE_CSI_SPACE:
+        term_state = TSTATE_DATA;
+        if (c == 'q') {
+          // DECSCUSR: Set cursor style (0,1: blink block; 2: steady block; 3,4: underline; 5,6: bar)
+          setCursorStyle(DCEvars[0]);
         }
         break;
       default:

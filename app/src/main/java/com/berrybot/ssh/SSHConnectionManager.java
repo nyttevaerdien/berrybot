@@ -16,38 +16,45 @@ import android.util.Log;
 import com.trilead.ssh2.Connection;
 import com.trilead.ssh2.ConnectionInfo;
 import com.trilead.ssh2.ConnectionMonitor;
+import com.trilead.ssh2.ProxyData;
 import com.trilead.ssh2.ServerHostKeyVerifier;
 import com.trilead.ssh2.Session;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.security.KeyPair;
 import java.security.MessageDigest;
+import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class SSHConnectionManager implements ConnectionMonitor {
     private static final String TAG = "BerryBot.SSH";
 
     public static final String DEFAULT_HOST = "";
     public static final int DEFAULT_PORT = 2222;
-    public static final String DEFAULT_USER = "kirill";
+    public static final String DEFAULT_USER = "";
 
     // Power & Radio Optimization Constants
     public static final long WAKELOCK_CONNECT_TIMEOUT_MS = 15000;   // 15s to establish connection & authenticate
-    public static final long WAKELOCK_IO_TIMEOUT_MS = 5000;         // 5s to write user keystrokes / commands
-    public static final long WAKELOCK_STREAMING_TIMEOUT_MS = 10000; // 10s CPU keepalive during active streaming responses
-    public static final long WAKELOCK_KEEPALIVE_TIMEOUT_MS = 3000;  // 3s to transmit keepalive ping
+    public static final long WAKELOCK_IO_TIMEOUT_MS = 1500;         // 1.5s to write user keystrokes / commands
+    public static final long WAKELOCK_STREAMING_TIMEOUT_MS = 3000;  // 3s CPU keepalive during active streaming responses
+    public static final long WAKELOCK_KEEPALIVE_TIMEOUT_MS = 4000;  // 4s to transmit keepalive ping
 
-    // Tuned keep-alive interval (45s): allows mobile cell radio to stay in low-power PCH/IDLE state (~35s)
+    // Tuned keep-alive interval (55s): allows mobile cell radio to stay in low-power PCH/IDLE state (~40s)
     // while preventing NAT/firewall mapping expiration (typically 60s+).
     public static final long KEEPALIVE_INTERVAL_MS = 45000;
     public static final long KEEPALIVE_CHECK_INTERVAL_MS = 15000;
+    public static final long KEEPALIVE_WATCHDOG_TIMEOUT_MS = 7000; // 7s active probe roundtrip watchdog
 
     // Exponential backoff for reconnection retries: 2s -> 4s -> 8s -> 16s -> 30s max
     public static final long INITIAL_RECONNECT_BACKOFF_MS = 2000;
@@ -87,6 +94,7 @@ public class SSHConnectionManager implements ConnectionMonitor {
 
     public synchronized void recycleBuffer(byte[] b) {
         if (b != null && b.length >= READ_BUFFER_SIZE && poolCount < BUFFER_POOL_SIZE) {
+            Arrays.fill(b, (byte) 0);
             bufferPool[poolCount++] = b;
         }
     }
@@ -98,6 +106,9 @@ public class SSHConnectionManager implements ConnectionMonitor {
     private PowerManager.WakeLock wakeLock;
     private BroadcastReceiver networkReceiver;
     private int lastKnownNetworkType = -1;
+    private int lastKnownNetworkSubtype = -1;
+    private final AtomicBoolean isConnecting = new AtomicBoolean(false);
+    private volatile long lastWakeLockAcquireTime = 0;
 
     private Listener listener;
     private Connection connection;
@@ -247,7 +258,9 @@ public class SSHConnectionManager implements ConnectionMonitor {
 
     public void acquireWakeLock(long timeoutMs) {
         try {
-            if (wakeLock != null) {
+            long now = System.currentTimeMillis();
+            if (wakeLock != null && (!wakeLock.isHeld() || now - lastWakeLockAcquireTime > 2500)) {
+                lastWakeLockAcquireTime = now;
                 wakeLock.acquire(timeoutMs);
             }
         } catch (Throwable t) {
@@ -305,6 +318,7 @@ public class SSHConnectionManager implements ConnectionMonitor {
     private synchronized void handleNetworkChange() {
         boolean isAvailable = isNetworkAvailable();
         int currentType = -1;
+        int currentSubtype = -1;
         String typeName = "None";
         try {
             ConnectivityManager cm = (ConnectivityManager) context.getSystemService(Context.CONNECTIVITY_SERVICE);
@@ -312,6 +326,7 @@ public class SSHConnectionManager implements ConnectionMonitor {
                 NetworkInfo info = cm.getActiveNetworkInfo();
                 if (info != null && info.isConnected()) {
                     currentType = info.getType();
+                    currentSubtype = info.getSubtype();
                     typeName = info.getTypeName();
                 }
             }
@@ -321,6 +336,7 @@ public class SSHConnectionManager implements ConnectionMonitor {
 
         if (!isAvailable) {
             lastKnownNetworkType = -1;
+            lastKnownNetworkSubtype = -1;
             // 1. Cancel pending retry runnable so we don't hammer CPU while offline
             mainHandler.removeCallbacks(reconnectRunnable);
             // 2. Release WakeLock immediately to let CPU sleep
@@ -334,22 +350,30 @@ public class SSHConnectionManager implements ConnectionMonitor {
             }
         } else {
             // Network is available
-            boolean typeChanged = (lastKnownNetworkType != -1 && lastKnownNetworkType != currentType);
+            boolean typeChanged = (lastKnownNetworkType != -1 && (lastKnownNetworkType != currentType || lastKnownNetworkSubtype != currentSubtype));
             lastKnownNetworkType = currentType;
+            lastKnownNetworkSubtype = currentSubtype;
 
             if (typeChanged && isConnected()) {
-                // Radio transitioned between Wi-Fi and Cellular. Old TCP socket is dead on previous interface.
+                // Radio transitioned between Wi-Fi and Cellular or 3G <-> LTE. Old TCP socket is dead on previous interface.
                 Log.i(TAG, "Radio interface transition detected (" + typeName + "), reconnecting session...");
                 currentBackoffMs = INITIAL_RECONNECT_BACKOFF_MS;
                 closeSessionAndConnection();
                 scheduleReconnect("Network switched to " + typeName);
             } else if (hasStartedOnce && !isConnected() && !userRequestedDisconnect && isAutoReconnectEnabled) {
-                Log.i(TAG, "Network restored (" + typeName + "), triggering reconnect...");
+                Log.i(TAG, "Network restored (" + typeName + "), scheduling stabilized reconnect...");
                 currentBackoffMs = INITIAL_RECONNECT_BACKOFF_MS;
                 mainHandler.removeCallbacks(reconnectRunnable);
-                connectInternal(false);
+                // Delay 1200ms to allow mobile radio PDP bearer and DNS routes to stabilize
+                mainHandler.postDelayed(reconnectRunnable, 1200);
             }
         }
+    }
+
+    public static long applyJitter(long baseDelayMs) {
+        // Full Jitter with +/- 25% randomized window to prevent thundering-herd reconnect storms
+        double factor = 0.75 + (0.50 * Math.random());
+        return Math.max(1000, (long) (baseDelayMs * factor));
     }
 
     public static long computeNextBackoff(long currentBackoffMs) {
@@ -370,7 +394,7 @@ public class SSHConnectionManager implements ConnectionMonitor {
 
         mainHandler.removeCallbacks(reconnectRunnable);
 
-        long delay = currentBackoffMs;
+        long delay = applyJitter(currentBackoffMs);
         currentBackoffMs = computeNextBackoff(currentBackoffMs);
 
         String delaySec = String.valueOf(delay / 1000);
@@ -400,15 +424,27 @@ public class SSHConnectionManager implements ConnectionMonitor {
                 if (shouldSendKeepAlive(now, lastActivityTime, KEEPALIVE_INTERVAL_MS)) {
                     try {
                         if (connection != null && isConnected()) {
-                            Log.d(TAG, "Idle for " + ((now - lastActivityTime) / 1000) + "s, sending SSH keep-alive (SSH_MSG_IGNORE)");
-                            // Acquire wake lock for 3s to guarantee transmission through radio buffer
+                            Log.d(TAG, "Idle for " + ((now - lastActivityTime) / 1000) + "s, executing active keep-alive probe");
                             acquireWakeLock(WAKELOCK_KEEPALIVE_TIMEOUT_MS);
-                            connection.sendIgnorePacket();
+                            // Execute active ping with watchdog timeout to detect half-open sockets
+                            Future<?> pingTask = executor.submit(new Runnable() {
+                                @Override
+                                public void run() {
+                                    try {
+                                        connection.ping();
+                                    } catch (Throwable t) {
+                                        throw new RuntimeException(t);
+                                    }
+                                }
+                            });
+                            pingTask.get(KEEPALIVE_WATCHDOG_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                             lastActivityTime = System.currentTimeMillis();
                         }
-                    } catch (IOException e) {
-                        Log.w(TAG, "Keep-alive ping failed: " + e.getMessage());
-                        onConnectionBroken(e);
+                    } catch (Throwable e) {
+                        Log.w(TAG, "Active keep-alive probe failed / half-open socket: " + e.getMessage());
+                        onConnectionBroken(new IOException("Keep-alive probe failed: " + e.getMessage()));
+                    } finally {
+                        releaseWakeLock();
                     }
                 }
             }
@@ -453,6 +489,10 @@ public class SSHConnectionManager implements ConnectionMonitor {
     }
 
     private synchronized void connectInternal(boolean isExplicitUserConnect) {
+        if (!isConnecting.compareAndSet(false, true)) {
+            Log.w(TAG, "Connection attempt already in progress, skipping duplicate");
+            return;
+        }
         if (connection != null || session != null) {
             closeSessionAndConnection();
         }
@@ -464,6 +504,7 @@ public class SSHConnectionManager implements ConnectionMonitor {
         if (!isNetworkAvailable()) {
             Log.i(TAG, "Cannot connect: device is offline");
             notifyState(ConnectionState.DISCONNECTED, "Offline (no network)");
+            isConnecting.set(false);
             isRunning = false;
             return;
         }
@@ -471,6 +512,7 @@ public class SSHConnectionManager implements ConnectionMonitor {
         if (host == null || host.trim().isEmpty() || user == null || user.trim().isEmpty()) {
             Log.w(TAG, "Cannot connect: host or username is not configured");
             notifyState(ConnectionState.DISCONNECTED, "Setup required: Server Host & User empty");
+            isConnecting.set(false);
             isRunning = false;
             return;
         }
@@ -481,7 +523,11 @@ public class SSHConnectionManager implements ConnectionMonitor {
         executor.execute(new Runnable() {
             @Override
             public void run() {
-                runConnectionLoop();
+                try {
+                    runConnectionLoop();
+                } finally {
+                    isConnecting.set(false);
+                }
             }
         });
     }
@@ -498,7 +544,10 @@ public class SSHConnectionManager implements ConnectionMonitor {
 
     public synchronized void destroy() {
         userRequestedDisconnect = true;
-        mainHandler.removeCallbacks(reconnectRunnable);
+        if (mainHandler != null) {
+            mainHandler.removeCallbacksAndMessages(null);
+        }
+        this.listener = null;
         stopKeepAlive();
         releaseWakeLock();
         unregisterNetworkReceiver();
@@ -568,21 +617,31 @@ public class SSHConnectionManager implements ConnectionMonitor {
             connection = new Connection(host, port);
             connection.addConnectionMonitor(this);
 
+            // Configure socket with TCP_NODELAY, SO_KEEPALIVE, and IPTOS_LOWDELAY for cellular QoS
+            connection.setProxyData(new ProxyData() {
+                @Override
+                public Socket openConnection(String targetHostname, int targetPort, int timeout) throws IOException {
+                    Socket socket = new Socket();
+                    socket.setKeepAlive(true);
+                    socket.setTcpNoDelay(true);
+                    socket.setTrafficClass(0x10); // IPTOS_LOWDELAY
+                    socket.connect(new InetSocketAddress(targetHostname, targetPort), timeout > 0 ? timeout : 15000);
+                    return socket;
+                }
+            });
+
             ConnectionInfo info = connection.connect(new ServerHostKeyVerifier() {
                 @Override
                 public boolean verifyServerHostKey(String hostname, int port, String serverHostKeyAlgorithm, byte[] serverHostKey) throws Exception {
                     MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
                     byte[] digest = sha256.digest(serverHostKey);
                     String fp = "SHA256:" + Base64.encodeToString(digest, Base64.NO_WRAP).replaceAll("=+$", "");
+                    Arrays.fill(digest, (byte) 0);
                     Log.i(TAG, "Server host key: algo=" + serverHostKeyAlgorithm + ", fp=" + fp);
-
-                    if ("127.0.0.1".equals(hostname) || "localhost".equals(hostname)) {
-                        return true;
-                    }
 
                     if (context != null) {
                         SharedPreferences knownHosts = context.getSharedPreferences("berrybot_known_hosts", Context.MODE_PRIVATE);
-                        String key = hostname + ":" + port;
+                        String key = hostname + ":" + port + "|" + serverHostKeyAlgorithm;
                         String savedFp = knownHosts.getString(key, null);
                         if (savedFp == null) {
                             // Trust On First Use (TOFU)
@@ -591,12 +650,14 @@ public class SSHConnectionManager implements ConnectionMonitor {
                             return true;
                         } else if (!savedFp.equals(fp)) {
                             Log.e(TAG, "POTENTIAL MITM ATTACK: Host key changed for " + key);
-                            throw new java.io.IOException("Host key verification failed for " + key);
+                            throw new HostKeyMismatchException("POTENTIAL MITM ATTACK: Server host key fingerprint changed! Expected " + savedFp + " but received " + fp);
                         }
+                    } else {
+                        return false;
                     }
                     return true;
                 }
-            }, 10000, 10000);
+            }, 15000, 15000); // 15s Connect and KEX timeout for mobile networks
 
             Log.i(TAG, "SSH KEX negotiated: " + info.keyExchangeAlgorithm + ", cipher: " + info.clientToServerCryptoAlgorithm);
 
@@ -647,6 +708,13 @@ public class SSHConnectionManager implements ConnectionMonitor {
             // Release the connection setup wake lock now that connection is established and idle
             releaseWakeLock();
 
+        } catch (HostKeyMismatchException eMitm) {
+            Log.e(TAG, "FATAL SECURITY ALERT: " + eMitm.getMessage());
+            closeSessionAndConnection();
+            releaseWakeLock();
+            isRunning = false;
+            userRequestedDisconnect = true; // ABORT all reconnection attempts immediately
+            notifyState(ConnectionState.ERROR, "SECURITY WARNING: Host key verification failed! Connection aborted.");
         } catch (Exception e) {
             Log.e(TAG, "SSH Connection error", e);
             closeSessionAndConnection();
@@ -714,7 +782,7 @@ public class SSHConnectionManager implements ConnectionMonitor {
     }
 
     private synchronized void onConnectionBroken(Throwable reason) {
-        if (userRequestedDisconnect) {
+        if (userRequestedDisconnect || !isRunning) {
             return;
         }
         String msg = reason != null ? reason.getMessage() : "Connection lost";
@@ -724,6 +792,12 @@ public class SSHConnectionManager implements ConnectionMonitor {
         releaseWakeLock();
         isRunning = false;
         scheduleReconnect(msg);
+    }
+
+    public static class HostKeyMismatchException extends java.io.IOException {
+        public HostKeyMismatchException(String msg) {
+            super(msg);
+        }
     }
 
     @Override

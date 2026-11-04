@@ -254,12 +254,26 @@ public class KeycodeAndShortcutMappingTest {
         view.handleKeyEvent(KeyEvent.KEYCODE_ENTER, false, false, false, '\r');
         Assert.assertEquals("Enter should send \\r", "\r", getSentText());
 
-        // Tab
+        // Tab (Direct KEYCODE_TAB)
         networkBytes.reset();
         view.handleKeyEvent(KeyEvent.KEYCODE_TAB, false, false, false, '\t');
         byte[] tabBytes = networkBytes.toByteArray();
         Assert.assertEquals("Tab should send 1 byte", 1, tabBytes.length);
         Assert.assertEquals("Tab should send 0x09", 0x09, tabBytes[0]);
+
+        // Alt+Space -> Tab
+        networkBytes.reset();
+        view.handleKeyEvent(KeyEvent.KEYCODE_SPACE, true, false, false, ' ');
+        byte[] altSpaceBytes = networkBytes.toByteArray();
+        Assert.assertEquals("Alt+Space should send 1 byte (Tab)", 1, altSpaceBytes.length);
+        Assert.assertEquals("Alt+Space should produce ASCII 9 (\\t)", '\t', (char) altSpaceBytes[0]);
+
+        // Alt+T -> Tab
+        networkBytes.reset();
+        view.handleKeyEvent(KeyEvent.KEYCODE_T, true, false, false, 't');
+        byte[] altTBytes = networkBytes.toByteArray();
+        Assert.assertEquals("Alt+T should send 1 byte (Tab)", 1, altTBytes.length);
+        Assert.assertEquals("Alt+T should produce ASCII 9 (\\t)", '\t', (char) altTBytes[0]);
 
         // Escape
         networkBytes.reset();

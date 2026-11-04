@@ -22,6 +22,7 @@ public class KeyManagementActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         setContentView(R.layout.activity_key_management);
 
         keyStorage = KeyStorage.getInstance(this);
@@ -34,6 +35,9 @@ public class KeyManagementActivity extends Activity {
 
         etPublicKey.setTypeface(monoFont);
         etPrivateKeyInput.setTypeface(monoFont);
+        etPrivateKeyInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | 
+                android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD | 
+                android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         if (tvFingerprint != null) {
             tvFingerprint.setTypeface(monoFont);
         }
@@ -124,6 +128,9 @@ public class KeyManagementActivity extends Activity {
                 int portInput = 2222;
                 try {
                     portInput = Integer.parseInt(portStr);
+                    if (portInput < 1 || portInput > 65535) {
+                        portInput = 2222;
+                    }
                 } catch (NumberFormatException ignored) {}
 
                 getSharedPreferences("berrybot_prefs", MODE_PRIVATE)
@@ -193,6 +200,9 @@ public class KeyManagementActivity extends Activity {
         int p = 2222;
         try {
             p = Integer.parseInt(pStr);
+            if (p < 1 || p > 65535) {
+                p = 2222;
+            }
         } catch (NumberFormatException ignored) {}
 
         getSharedPreferences("berrybot_prefs", MODE_PRIVATE)
@@ -228,12 +238,10 @@ public class KeyManagementActivity extends Activity {
     private void showPassphraseDialog() {
         final EditText input = new EditText(this);
         input.setTypeface(com.berrybot.util.FontHelper.getMonospaceTypeface(this));
-        String saved = keyStorage.getSavedPassphrase();
-        if (saved != null) {
-            input.setText(saved);
-        } else {
-            input.setHint("12 words or a memorable secret sentence");
-        }
+        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT | 
+                android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD | 
+                android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        input.setHint("12 words or a memorable secret sentence");
         input.setMinLines(3);
         input.setGravity(android.view.Gravity.TOP | android.view.Gravity.LEFT);
 
@@ -256,6 +264,7 @@ public class KeyManagementActivity extends Activity {
             .setView(layout)
             .setPositiveButton("Apply Key", (dialog, which) -> {
                 String phrase = input.getText().toString().trim();
+                input.setText("");
                 if (phrase.isEmpty()) {
                     Toast.makeText(this, "Phrase cannot be empty", Toast.LENGTH_SHORT).show();
                     return;
