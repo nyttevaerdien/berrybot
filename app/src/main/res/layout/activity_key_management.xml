@@ -14,7 +14,7 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="BerryBot SSH Keys"
+            android:text="BerryBot Connection &amp; Keys"
             android:textColor="@color/claude_coral"
             android:textSize="16sp"
             android:textStyle="bold"
@@ -24,7 +24,7 @@
             android:id="@+id/tvSetupNotice"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Setup: Settle your SSH key below and add your Public Key to your server's authorized_keys before connecting."
+            android:text="Setup: Enter your Server Host/IP &amp; Username, and add your Public Key to your server's ~/.ssh/authorized_keys before connecting."
             android:textColor="@color/claude_coral"
             android:textSize="11sp"
             android:textStyle="bold"
@@ -32,6 +32,80 @@
             android:padding="8dp"
             android:layout_marginBottom="10dp"
             android:visibility="gone" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="1. Remote Server Connection:"
+            android:textColor="@color/claude_cream"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="4dp">
+
+            <EditText
+                android:id="@+id/etServerHost"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="3"
+                android:hint="Host / IP (e.g. 192.168.1.100)"
+                android:textColorHint="@color/claude_cream_dim"
+                android:textColor="@color/claude_cream"
+                android:textSize="12sp"
+                android:background="@drawable/key_bg_normal"
+                android:padding="6dp"
+                android:singleLine="true"
+                android:layout_marginRight="4dp" />
+
+            <EditText
+                android:id="@+id/etServerPort"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:hint="Port"
+                android:text="22"
+                android:textColorHint="@color/claude_cream_dim"
+                android:textColor="@color/claude_cream"
+                android:textSize="12sp"
+                android:inputType="number"
+                android:background="@drawable/key_bg_normal"
+                android:padding="6dp"
+                android:singleLine="true" />
+
+        </LinearLayout>
+
+        <EditText
+            android:id="@+id/etServerUser"
+            android:layout_width="match_parent"
+            android:layout_height="38dp"
+            android:hint="Username (e.g. root or ubuntu)"
+            android:textColorHint="@color/claude_cream_dim"
+            android:textColor="@color/claude_cream"
+            android:textSize="12sp"
+            android:background="@drawable/key_bg_normal"
+            android:padding="6dp"
+            android:singleLine="true"
+            android:layout_marginBottom="10dp" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="1dp"
+            android:background="@color/claude_border"
+            android:layout_marginBottom="10dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="2. SSH Public Key Authentication:"
+            android:textColor="@color/claude_cream"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
 
         <LinearLayout
             android:layout_width="match_parent"

@@ -468,6 +468,13 @@ public class SSHConnectionManager implements ConnectionMonitor {
             return;
         }
 
+        if (host == null || host.trim().isEmpty() || user == null || user.trim().isEmpty()) {
+            Log.w(TAG, "Cannot connect: host or username is not configured");
+            notifyState(ConnectionState.DISCONNECTED, "Setup required: Server Host & User empty");
+            isRunning = false;
+            return;
+        }
+
         acquireWakeLock(WAKELOCK_CONNECT_TIMEOUT_MS);
         notifyState(ConnectionState.CONNECTING, "Connecting…");
 

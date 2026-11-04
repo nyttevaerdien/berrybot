@@ -143,11 +143,13 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
         initViews();
         setupKeyBar();
 
-        // Connect automatically on startup only if key has been settled
+        // Connect automatically on startup only if key has been settled AND host/user are configured
         android.content.SharedPreferences prefs = getSharedPreferences("berrybot_prefs", MODE_PRIVATE);
         boolean keySettled = prefs.getBoolean("key_setup_settled", false);
-        if (!keySettled) {
-            onConnectionStateChanged(SSHConnectionManager.ConnectionState.DISCONNECTED, "Setup: Settle SSH key before connecting");
+        String currentHost = prefs.getString("host", "").trim();
+        String currentUser = prefs.getString("user", "").trim();
+        if (!keySettled || currentHost.isEmpty() || currentUser.isEmpty()) {
+            onConnectionStateChanged(SSHConnectionManager.ConnectionState.DISCONNECTED, "Setup: Configure server & SSH key before connecting");
             android.content.Intent intent = new android.content.Intent(this, KeyManagementActivity.class);
             intent.putExtra("is_first_run", true);
             startActivityForResult(intent, REQUEST_CODE_KEY_SETUP);
@@ -175,7 +177,19 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
         });
 
         View btnConnection = findViewById(R.id.btnConnection);
-        View.OnClickListener menuClickListener = v -> showUnifiedMenu();
+        View.OnClickListener menuClickListener = v -> {
+            android.content.SharedPreferences p = getSharedPreferences("berrybot_prefs", MODE_PRIVATE);
+            String h = p.getString("host", "").trim();
+            String u = p.getString("user", "").trim();
+            boolean settled = p.getBoolean("key_setup_settled", false);
+            if (!settled || h.isEmpty() || u.isEmpty()) {
+                Intent intent = new Intent(this, KeyManagementActivity.class);
+                intent.putExtra("is_first_run", true);
+                startActivityForResult(intent, REQUEST_CODE_KEY_SETUP);
+            } else {
+                showUnifiedMenu();
+            }
+        };
         if (btnConnection != null) {
             btnConnection.setOnClickListener(menuClickListener);
             btnConnection.setOnLongClickListener(v -> {
@@ -276,7 +290,9 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
             .setItems(options, (dialog, which) -> {
                 if (which == 0) {
                     android.content.SharedPreferences prefs = getSharedPreferences("berrybot_prefs", MODE_PRIVATE);
-                    if (!prefs.getBoolean("key_setup_settled", false)) {
+                    String h = prefs.getString("host", "").trim();
+                    String u = prefs.getString("user", "").trim();
+                    if (!prefs.getBoolean("key_setup_settled", false) || h.isEmpty() || u.isEmpty()) {
                         Intent intent = new Intent(this, KeyManagementActivity.class);
                         intent.putExtra("is_first_run", true);
                         startActivityForResult(intent, REQUEST_CODE_KEY_SETUP);
@@ -699,15 +715,20 @@ public class MainActivity extends Activity implements SSHConnectionManager.Liste
     protected void onActivityResult(int requestCode, int resultCode, android.content.Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode == REQUEST_CODE_KEY_SETUP) {
-            if (resultCode == RESULT_OK) {
+            android.content.SharedPreferences prefs = getSharedPreferences("berrybot_prefs", MODE_PRIVATE);
+            String h = prefs.getString("host", "").trim();
+            int p = prefs.getInt("port", 22);
+            String u = prefs.getString("user", "").trim();
+            boolean keySettled = prefs.getBoolean("key_setup_settled", false);
+
+            if (resultCode == RESULT_OK && !h.isEmpty() && !u.isEmpty()) {
                 if (connectionManager != null) {
+                    connectionManager.updateConnectionParams(h, p, u);
                     connectionManager.connect();
                 }
             } else {
-                android.content.SharedPreferences prefs = getSharedPreferences("berrybot_prefs", MODE_PRIVATE);
-                boolean keySettled = prefs.getBoolean("key_setup_settled", false);
-                if (!keySettled) {
-                    onConnectionStateChanged(SSHConnectionManager.ConnectionState.DISCONNECTED, "Key setup pending. Tap here or Keys menu to configure key.");
+                if (!keySettled || h.isEmpty() || u.isEmpty()) {
+                    onConnectionStateChanged(SSHConnectionManager.ConnectionState.DISCONNECTED, "Setup required: Tap here to configure server & key.");
                 }
             }
         }

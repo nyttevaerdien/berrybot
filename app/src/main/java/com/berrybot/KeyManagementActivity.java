@@ -67,9 +67,22 @@ public class KeyManagementActivity extends Activity {
         Button btnClose = (Button) findViewById(R.id.btnClose);
         Button btnConnectNow = (Button) findViewById(R.id.btnConnectNow);
 
+        EditText etServerHost = (EditText) findViewById(R.id.etServerHost);
+        EditText etServerPort = (EditText) findViewById(R.id.etServerPort);
+        EditText etServerUser = (EditText) findViewById(R.id.etServerUser);
+
+        android.content.SharedPreferences prefs = getSharedPreferences("berrybot_prefs", MODE_PRIVATE);
+        String savedHost = prefs.getString("host", "");
+        int savedPort = prefs.getInt("port", 22);
+        String savedUser = prefs.getString("user", "");
+
+        if (etServerHost != null && !savedHost.isEmpty()) etServerHost.setText(savedHost);
+        if (etServerPort != null) etServerPort.setText(String.valueOf(savedPort > 0 ? savedPort : 22));
+        if (etServerUser != null && !savedUser.isEmpty()) etServerUser.setText(savedUser);
+
         android.widget.TextView tvSetupNotice = (android.widget.TextView) findViewById(R.id.tvSetupNotice);
         boolean isFirstRun = getIntent().getBooleanExtra("is_first_run", false);
-        if (tvSetupNotice != null && isFirstRun) {
+        if (tvSetupNotice != null && (isFirstRun || savedHost.isEmpty() || savedUser.isEmpty())) {
             tvSetupNotice.setVisibility(android.view.View.VISIBLE);
         }
 
@@ -79,16 +92,40 @@ public class KeyManagementActivity extends Activity {
         btnPassphraseKey.setOnClickListener(v -> showPassphraseDialog());
 
         if (btnConnectNow != null) {
-            if (isFirstRun) {
-                btnConnectNow.setText("Key Settled — Connect to Server");
+            if (isFirstRun || savedHost.isEmpty()) {
+                btnConnectNow.setText("Save & Connect to Server");
             } else {
                 btnConnectNow.setText("Save & Reconnect");
             }
             btnConnectNow.setOnClickListener(v -> {
+                String hostInput = etServerHost != null ? etServerHost.getText().toString().trim() : "";
+                String userInput = etServerUser != null ? etServerUser.getText().toString().trim() : "";
+                String portStr = etServerPort != null ? etServerPort.getText().toString().trim() : "22";
+
+                if (hostInput.isEmpty()) {
+                    Toast.makeText(this, "Please enter your Server Host / IP", Toast.LENGTH_SHORT).show();
+                    if (etServerHost != null) etServerHost.requestFocus();
+                    return;
+                }
+                if (userInput.isEmpty()) {
+                    Toast.makeText(this, "Please enter your SSH Username", Toast.LENGTH_SHORT).show();
+                    if (etServerUser != null) etServerUser.requestFocus();
+                    return;
+                }
+
+                int portInput = 22;
+                try {
+                    portInput = Integer.parseInt(portStr);
+                } catch (NumberFormatException ignored) {}
+
                 getSharedPreferences("berrybot_prefs", MODE_PRIVATE)
                     .edit()
+                    .putString("host", hostInput)
+                    .putInt("port", portInput)
+                    .putString("user", userInput)
                     .putBoolean("key_setup_settled", true)
                     .commit();
+
                 setResult(RESULT_OK);
                 finish();
             });

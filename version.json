@@ -1,7 +1,7 @@
 {
-  "versionCode": 19,
-  "versionName": "1.0.19",
-  "apkUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.19/berrybot-1.0.19.apk",
-  "downloadUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.19/berrybot-1.0.19.apk",
-  "changelog": "BerryBot v1.0.19: Switched to Hack Monospace font with slashed zero (0 vs O), stored uncompressed for Android 4.3 Dalvik compatibility, added [A-]/[A+] font sizing buttons on Key screen, disk extract fallback."
+  "versionCode": 20,
+  "versionName": "1.0.20",
+  "apkUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.20/berrybot-1.0.20.apk",
+  "downloadUrl": "https://github.com/nyttevaerdien/berrybot/releases/download/v1.0.20/berrybot-1.0.20.apk",
+  "changelog": "BerryBot v1.0.20: Integrated Server Host/IP, Port & Username into first-start onboarding setup screen; prevents connection attempts on empty host."
 }
